@@ -29,9 +29,16 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true, // Allows users to sign up with Google without conflicts
     },
-    role:{
-      type:String
-    }
+    role: {
+      type: String,
+    },
+    verified: {
+      type: Boolean,
+      default: function () {
+        // Only NGOs get verified field, default false
+        return this.role === "NGO" ? false : undefined;
+      },
+    },
   },
   { timestamps: true }
 );

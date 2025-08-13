@@ -39,22 +39,27 @@ function App() {
       console.log(error)
     }
   }
+const verifyPayment = async () => {
+  try {
+    let res = await axios.post("/api/cashfreepg/verify-order", {
+      orderId: orderId
+    });
 
-  const verifyPayment = async () => {
-    try {
-      
-      let res = await axios.post("/api/cashfreepg/verify-order", {
-        orderId: orderId
-      })
-
-      if(res && res.data){
-        alert("payment verified")
+    if (res && res.data) {
+      const status = res.data.order_status; // Cashfree's actual field
+      if (status === "PAID") {
+        alert("✅ Payment Successful!");
+      } else if (status === "PENDING") {
+        alert("⏳ Payment Pending...");
+      } else {
+        alert("❌ Payment Failed");
       }
-
-    } catch (error) {
-      console.log(error)
     }
+  } catch (error) {
+    console.log(error);
+    alert("Error verifying payment");
   }
+};
 
   const handleClick = async (e) => {
     e.preventDefault()
