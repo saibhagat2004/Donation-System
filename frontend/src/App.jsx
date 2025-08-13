@@ -8,6 +8,7 @@ import SignUpPage from "./pages/auth/SignUpPage";
 import Navbar from "./components/NavBar";
 import LoadingSpinner from "./components/LoadingSpinner";
 import AppLayout from "./components/AppLayout";
+import PaymentPage from "./pages/PaymentPage";
 
 
 function App() {
@@ -41,7 +42,8 @@ function App() {
 
   return (
     <>
-    <>
+    <PaymentPage />
+    {/* <>
       <Routes>
         <Route
           path="/"
@@ -63,7 +65,7 @@ function App() {
         />
       </Routes>
     </>
-      <Toaster />
+      <Toaster /> */}
     </>
   );
 }
