@@ -10,6 +10,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routers/auth.route.js"
 import userRouter from "./routers/user.route.js"
 import cashfreepgRouter from "./routers/cashfreepg.route.js"
+import campaignRouter from "./routers/campaign.route.js"
 
 dotenv.config(); //use to read .env content
 // cloudinary.config(
@@ -31,9 +32,13 @@ app.use(express.urlencoded({extended:true})); //to parse from data(urlencoded)
 app.use(cookieParser());  // parses cookies attached to the client request object, 
                           //making them accessible via req.cookies. 
 
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use("/api/auth",authRoutes);
 app.use("/api/users",userRouter);
 app.use("/api/cashfreepg",cashfreepgRouter);
+app.use("/api/campaigns",campaignRouter);
 // app.use("/api/v2/cashfree", v2Routes); // new version
 
  
