@@ -10,6 +10,7 @@ import AppLayout from "./components/AppLayout";
 import PaymentPage from "./pages/PaymentPage";
 import NgoForm from "./pages/NGO/AddNGOBeneficiary"; // Example extra page
 import Campaigns from "./pages/Campaigns";
+import CreateCampaign from "./pages/CreateCampaign";
 
 function App() {
   const [isGuest, setIsGuest] = useState(false);
@@ -59,6 +60,7 @@ function App() {
           {/* Example additional routes inside layout */}
           <Route path="ngo-form" element={<NgoForm />} />
           <Route path="campaigns" element={<Campaigns />} />
+          <Route path="create-campaign" element={<CreateCampaign />} />
           <Route path="payment" element={<PaymentPage />} />
         </Route>
 

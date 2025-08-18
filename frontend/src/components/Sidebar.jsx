@@ -84,7 +84,8 @@ const menuItems = {
   ngo: [
     { label: "Dashboard", path: "/" },
     { label: "NGO Form", path: "/ngo-form" }, // Matches nested route
-    { label: "Campaigns", path: "/campaigns" },
+    { label: "My Campaigns", path: "/campaigns" },
+    { label: "Create Campaign", path: "/create-campaign" },
     { label: "Donations", path: "/donations" },
     { label: "Reports", path: "/reports" },
   ],

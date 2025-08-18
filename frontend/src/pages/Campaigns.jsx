@@ -1,30 +1,20 @@
-import React, { useState } from "react";
-import axios from "axios";
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
 export default function Campaigns() {
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    goal_amount: "",
-    current_amount: 0,
+  const navigate = useNavigate();
+  
+  const [campaigns, setCampaigns] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pagination, setPagination] = useState({});
+  const [filters, setFilters] = useState({
     category: "",
-    start_date: "",
-    end_date: "",
-    location: "",
-    contact_person: "",
-    contact_email: "",
-    contact_phone: "",
-    beneficiary_details: "",
-    campaign_status: "active",
-    tags: "",
-    // Image files
-    logo: null,
-    activity_photos: []
+    status: "active",
+    search: "",
+    page: 1
   });
-
-  const [errors, setErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchInput, setSearchInput] = useState(""); // Separate state for search input
 
   const categories = [
     "Education",
@@ -39,411 +29,394 @@ export default function Campaigns() {
     "Other"
   ];
 
-  const handleChange = (e) => {
-    const { name, value, files, type } = e.target;
-    
-    if (type === "file") {
-      if (name === "activity_photos") {
-        // Handle multiple files for activity photos
-        setForm({
-          ...form,
-          [name]: Array.from(files)
-        });
-      } else {
-        // Handle single file for logo
-        setForm({
-          ...form,
-          [name]: files[0]
-        });
-      }
-    } else {
-      setForm({
-        ...form,
-        [name]: value
-      });
-    }
+  const statusOptions = [
+    { value: "active", label: "Active" },
+    { value: "completed", label: "Completed" },
+    { value: "paused", label: "Paused" },
+    { value: "all", label: "All Campaigns" }
+  ];
 
-    // Clear errors when user starts editing
-    setErrors({
-      ...errors,
-      [name]: ""
-    });
-  };
+  // Fetch campaigns on component mount and when filters change
+  useEffect(() => {
+    fetchCampaigns();
+  }, [filters]);
 
-  const validate = () => {
-    const newErrors = {};
-    const requiredFields = [
-      "title", "description", "goal_amount", "category", 
-      "start_date", "end_date", "contact_person", "contact_email", "contact_phone"
-    ];
-    
-    requiredFields.forEach(field => {
-      if (!form[field]) {
-        newErrors[field] = "This field is required";
-      }
-    });
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (form.contact_email && !emailRegex.test(form.contact_email)) {
-      newErrors.contact_email = "Please enter a valid email address";
-    }
-
-    // Validate phone number (basic validation)
-    const phoneRegex = /^[0-9]{10}$/;
-    if (form.contact_phone && !phoneRegex.test(form.contact_phone)) {
-      newErrors.contact_phone = "Please enter a valid 10-digit phone number";
-    }
-
-    // Validate goal amount
-    if (form.goal_amount && (isNaN(form.goal_amount) || form.goal_amount <= 0)) {
-      newErrors.goal_amount = "Please enter a valid amount greater than 0";
-    }
-
-    // Validate dates
-    if (form.start_date && form.end_date && new Date(form.start_date) >= new Date(form.end_date)) {
-      newErrors.end_date = "End date must be after start date";
-    }
-
-    return newErrors;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const validationErrors = validate();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+  // Debounced search effect - updates filters.search after user stops typing
+  useEffect(() => {
+    if (searchInput === "") {
+      // If search is cleared, update immediately
+      setFilters(prev => ({
+        ...prev,
+        search: "",
+        page: 1
+      }));
       return;
     }
 
-    setIsSubmitting(true);
+    const debounceTimer = setTimeout(() => {
+      setFilters(prev => ({
+        ...prev,
+        search: searchInput,
+        page: 1 // Reset to first page when search changes
+      }));
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchInput]);
+
+  const fetchCampaigns = async () => {
     try {
-      const formData = new FormData();
+      setIsLoading(true);
       
-      // Append all text fields
-      Object.keys(form).forEach(key => {
-        if (key === "activity_photos") {
-          // Append multiple activity photos
-          form.activity_photos.forEach((file) => {
-            formData.append("activity_photos", file);
-          });
-        } else if (key === "logo") {
-          // Append logo file if it exists
-          if (form[key]) {
-            formData.append(key, form[key]);
-          }
-        } else {
-          formData.append(key, form[key]);
-        }
+      // Get current user ID for filtering
+      const userResponse = await fetch("/api/auth/me", {
+        credentials: "include"
       });
-
-      const res = await axios.post("/api/campaigns/create", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-
-      // Show success toast
-      toast.success(`Campaign "${form.title}" created successfully! ID: ${res.data.campaign_id}`);
       
-      // Reset form after successful submission
-      setForm({
-        title: "",
-        description: "",
-        goal_amount: "",
-        current_amount: 0,
-        category: "",
-        start_date: "",
-        end_date: "",
-        location: "",
-        contact_person: "",
-        contact_email: "",
-        contact_phone: "",
-        beneficiary_details: "",
-        campaign_status: "active",
-        tags: "",
-        logo: null,
-        activity_photos: []
+      if (!userResponse.ok) {
+        toast.error("Please login to view campaigns");
+        navigate("/login");
+        return;
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Build query parameters
+      const queryParams = new URLSearchParams({
+        created_by: userData._id, // Filter by current user's campaigns
+        page: filters.page,
+        limit: 6
+      });
+      
+      if (filters.category) queryParams.append("category", filters.category);
+      if (filters.status && filters.status !== "all") queryParams.append("status", filters.status);
+      if (filters.search) queryParams.append("search", filters.search);
+
+      const response = await fetch(`/api/campaigns?${queryParams}`, {
+        credentials: "include"
       });
 
-      // Clear file inputs
-      const fileInputs = document.querySelectorAll('input[type="file"]');
-      fileInputs.forEach(input => input.value = '');
+      if (!response.ok) {
+        throw new Error("Failed to fetch campaigns");
+      }
+
+      const data = await response.json();
+      setCampaigns(data.campaigns);
+      setPagination(data.pagination);
 
     } catch (err) {
-      console.error(err);
-      let errorMsg = "Failed to create campaign";
-      if (err.response && err.response.data && err.response.data.error) {
-        errorMsg = err.response.data.error;
-      }
-      // Show error toast
-      toast.error(errorMsg);
+      console.error("Fetch campaigns error:", err);
+      toast.error("Failed to load campaigns");
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
+  const handleFilterChange = (key, value) => {
+    if (key === "search") {
+      setSearchInput(value); // Update search input state immediately for UI responsiveness
+    } else {
+      setFilters(prev => ({
+        ...prev,
+        [key]: value,
+        page: 1 // Reset to first page when filters change
+      }));
+    }
+  };
+
+  const handleClearFilters = () => {
+    const clearedFilters = { category: "", status: "active", search: "", page: 1 };
+    setFilters(clearedFilters);
+    setSearchInput(""); // Also clear the search input
+  };
+
+  const handlePageChange = (newPage) => {
+    setFilters(prev => ({
+      ...prev,
+      page: newPage
+    }));
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getStatusBadge = (status) => {
+    const statusColors = {
+      active: "bg-green-100 text-green-800",
+      completed: "bg-blue-100 text-blue-800",
+      paused: "bg-yellow-100 text-yellow-800",
+      ended: "bg-red-100 text-red-800"
+    };
+    
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[status] || 'bg-gray-100 text-gray-800'}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Loading campaigns...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white shadow-xl rounded-2xl">
-      <h2 className="text-3xl font-bold mb-8 text-center text-blue-600">Create New Campaign</h2>
-
-      <form onSubmit={handleSubmit} className="space-y-8">
-        
-        {/* Campaign Basic Info */}
+    <div className="max-w-7xl mx-auto p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
         <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-700">Campaign Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col md:col-span-2">
-              <label className="font-medium text-gray-700 mb-1">
-                Campaign Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="title"
-                placeholder="Enter campaign title"
-                value={form.title}
-                required
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.title && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              <span className="text-xs text-gray-500 mt-1">e.g. "Help Build Schools in Rural Areas"</span>
-              {errors.title && <span className="text-red-500 text-sm mt-1">{errors.title}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">
-                Category <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="category"
-                value={form.category}
-                required
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.category && "border-red-500"}`}
-                onChange={handleChange}
-              >
-                <option value="">Select Category</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-              {errors.category && <span className="text-red-500 text-sm mt-1">{errors.category}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">
-                Goal Amount (₹) <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="goal_amount"
-                type="number"
-                placeholder="100000"
-                value={form.goal_amount}
-                required
-                min="1"
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.goal_amount && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              <span className="text-xs text-gray-500 mt-1">Target amount to raise</span>
-              {errors.goal_amount && <span className="text-red-500 text-sm mt-1">{errors.goal_amount}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">
-                Start Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="start_date"
-                type="date"
-                value={form.start_date}
-                required
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.start_date && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              {errors.start_date && <span className="text-red-500 text-sm mt-1">{errors.start_date}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">
-                End Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="end_date"
-                type="date"
-                value={form.end_date}
-                required
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.end_date && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              {errors.end_date && <span className="text-red-500 text-sm mt-1">{errors.end_date}</span>}
-            </div>
-
-            <div className="flex flex-col md:col-span-2">
-              <label className="font-medium text-gray-700 mb-1">
-                Description <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                name="description"
-                placeholder="Describe your campaign, its goals, and how donations will be used..."
-                value={form.description}
-                required
-                rows="4"
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 resize-none ${errors.description && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              <span className="text-xs text-gray-500 mt-1">Provide detailed information about your campaign</span>
-              {errors.description && <span className="text-red-500 text-sm mt-1">{errors.description}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">Location</label>
-              <input
-                name="location"
-                placeholder="City, State"
-                value={form.location}
-                className="border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500"
-                onChange={handleChange}
-              />
-              <span className="text-xs text-gray-500 mt-1">Where will this campaign operate?</span>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">Tags</label>
-              <input
-                name="tags"
-                placeholder="education, children, rural (comma separated)"
-                value={form.tags}
-                className="border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500"
-                onChange={handleChange}
-              />
-              <span className="text-xs text-gray-500 mt-1">Comma separated tags for better discovery</span>
-            </div>
-          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Campaigns</h1>
+          <p className="text-gray-600">Manage and track your campaign performance</p>
         </div>
-
-        {/* Contact Information */}
-        <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-700">Contact Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">
-                Contact Person <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="contact_person"
-                placeholder="Full Name"
-                value={form.contact_person}
-                required
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.contact_person && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              {errors.contact_person && <span className="text-red-500 text-sm mt-1">{errors.contact_person}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">
-                Contact Email <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="contact_email"
-                type="email"
-                placeholder="contact@example.com"
-                value={form.contact_email}
-                required
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.contact_email && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              {errors.contact_email && <span className="text-red-500 text-sm mt-1">{errors.contact_email}</span>}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-1">
-                Contact Phone <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="contact_phone"
-                type="tel"
-                placeholder="9876543210"
-                value={form.contact_phone}
-                required
-                className={`border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 ${errors.contact_phone && "border-red-500"}`}
-                onChange={handleChange}
-              />
-              {errors.contact_phone && <span className="text-red-500 text-sm mt-1">{errors.contact_phone}</span>}
-            </div>
-          </div>
-        </div>
-
-        {/* Beneficiary Details */}
-        <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-700">Beneficiary Information</h3>
-          <div className="flex flex-col">
-            <label className="font-medium text-gray-700 mb-1">Beneficiary Details</label>
-            <textarea
-              name="beneficiary_details"
-              placeholder="Describe who will benefit from this campaign..."
-              value={form.beneficiary_details}
-              rows="3"
-              className="border rounded-lg p-3 focus:outline-blue-500 focus:border-blue-500 resize-none"
-              onChange={handleChange}
-            />
-            <span className="text-xs text-gray-500 mt-1">Information about who this campaign will help</span>
-          </div>
-        </div>
-
-        {/* Images & Media */}
-        <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-700">Images & Media</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Logo Upload */}
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-2">Campaign Logo</label>
-              <input
-                type="file"
-                name="logo"
-                accept="image/*"
-                className="border rounded-lg p-2 focus:outline-blue-500 focus:border-blue-500"
-                onChange={handleChange}
-              />
-              <span className="text-xs text-gray-500 mt-1">Upload your campaign/organization logo (PNG, JPG, JPEG)</span>
-              {form.logo && (
-                <div className="mt-2 text-sm text-green-600">
-                  Selected: {form.logo.name}
-                </div>
-              )}
-            </div>
-
-            {/* Activity Photos Upload */}
-            <div className="flex flex-col">
-              <label className="font-medium text-gray-700 mb-2">NGO Activity Photos</label>
-              <input
-                type="file"
-                name="activity_photos"
-                accept="image/*"
-                multiple
-                className="border rounded-lg p-2 focus:outline-blue-500 focus:border-blue-500"
-                onChange={handleChange}
-              />
-              <span className="text-xs text-gray-500 mt-1">Upload multiple photos showing your NGO's activities and impact (hold Ctrl/Cmd to select multiple)</span>
-              {form.activity_photos.length > 0 && (
-                <div className="mt-2 text-sm text-green-600">
-                  {form.activity_photos.length} photo(s) selected
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Submit Button */}
         <button
-          type="submit"
-          disabled={isSubmitting}
-          className={`w-full py-3 px-4 rounded-xl font-semibold text-lg transition ${
-            isSubmitting 
-              ? 'bg-gray-400 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-          }`}
+          onClick={() => navigate("/create-campaign")}
+          className="mt-4 sm:mt-0 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2"
         >
-          {isSubmitting ? 'Creating Campaign...' : 'Create Campaign'}
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Create Campaign
         </button>
-      </form>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <input
+              type="text"
+              placeholder="Search campaigns..."
+              value={searchInput}
+              onChange={(e) => handleFilterChange("search", e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* Category Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+            <select
+              value={filters.category}
+              onChange={(e) => handleFilterChange("category", e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+            >
+              <option value="">All Categories</option>
+              {categories.map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={filters.status}
+              onChange={(e) => handleFilterChange("status", e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+            >
+              {statusOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear Filters */}
+          <div className="flex items-end">
+            <button
+              onClick={handleClearFilters}
+              className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Campaigns Grid */}
+      {campaigns.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="mb-4">
+            <svg className="mx-auto h-24 w-24 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9.5a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-medium text-gray-900 mb-2">No campaigns found</h3>
+          <p className="text-gray-500 mb-6">
+            {searchInput || filters.category || (filters.status !== "active") 
+              ? "Try adjusting your filters to see more campaigns." 
+              : "You haven't created any campaigns yet."}
+          </p>
+          <button
+            onClick={() => navigate("/create-campaign")}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+          >
+            Create Your First Campaign
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Campaign Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {campaigns.map((campaign) => (
+              <div key={campaign._id} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow">
+                {/* Campaign Image */}
+                <div className="h-48 bg-gradient-to-r from-blue-500 to-purple-600 rounded-t-xl relative overflow-hidden">
+                  {campaign.logo ? (
+                    <img 
+                      src={`http://localhost:5000/${campaign.logo}`} 
+                      alt={campaign.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-white text-lg font-semibold">
+                      {campaign.title.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="absolute top-4 right-4">
+                    {getStatusBadge(campaign.campaign_status)}
+                  </div>
+                </div>
+
+                {/* Campaign Content */}
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+                      {campaign.title}
+                    </h3>
+                  </div>
+
+                  <p className="text-gray-600 text-sm mb-4 line-clamp-3">
+                    {campaign.description}
+                  </p>
+
+                  {/* Progress Bar */}
+                  <div className="mb-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Progress</span>
+                      <span className="text-sm text-gray-500">{campaign.progress_percentage || 0}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(campaign.progress_percentage || 0, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Campaign Stats */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Raised</p>
+                      <p className="font-semibold text-green-600">
+                        {formatCurrency(campaign.current_amount || 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Goal</p>
+                      <p className="font-semibold text-gray-900">
+                        {formatCurrency(campaign.goal_amount)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Campaign Details */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                      </svg>
+                      {campaign.category}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      {campaign.total_donors || 0} donors
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Ends {formatDate(campaign.end_date)}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-2">
+                    <button 
+                      onClick={() => navigate(`/campaign/${campaign._id}`)}
+                      className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                    >
+                      View Details
+                    </button>
+                    <button 
+                      onClick={() => navigate(`/campaign/${campaign._id}/edit`)}
+                      className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {pagination.total_pages > 1 && (
+            <div className="flex justify-center items-center space-x-4">
+              <button
+                onClick={() => handlePageChange(pagination.current_page - 1)}
+                disabled={pagination.current_page <= 1}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  pagination.current_page <= 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                } transition`}
+              >
+                Previous
+              </button>
+              
+              <span className="text-gray-600">
+                Page {pagination.current_page} of {pagination.total_pages}
+              </span>
+              
+              <button
+                onClick={() => handlePageChange(pagination.current_page + 1)}
+                disabled={pagination.current_page >= pagination.total_pages}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  pagination.current_page >= pagination.total_pages
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                } transition`}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
