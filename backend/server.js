@@ -10,6 +10,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routers/auth.route.js"
 import userRouter from "./routers/user.route.js"
 import cashfreepgRouter from "./routers/cashfreepg.route.js"
+
 dotenv.config(); //use to read .env content
 // cloudinary.config(
 //     {
@@ -33,6 +34,8 @@ app.use(cookieParser());  // parses cookies attached to the client request objec
 app.use("/api/auth",authRoutes);
 app.use("/api/users",userRouter);
 app.use("/api/cashfreepg",cashfreepgRouter);
+// app.use("/api/v2/cashfree", v2Routes); // new version
+
  
  if (process.env.NODE_ENV === "production") {         //if we not hit our endpoint run this
 	app.use(express.static(path.join(__dirname, "/frontend/dist")));

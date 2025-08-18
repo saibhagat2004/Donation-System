@@ -1,25 +1,25 @@
 import React, { useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
+
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/auth/login";
 import SignUpPage from "./pages/auth/SignUpPage";
-import Navbar from "./components/NavBar";
 import LoadingSpinner from "./components/LoadingSpinner";
 import AppLayout from "./components/AppLayout";
 import PaymentPage from "./pages/PaymentPage";
-
+import NgoForm from "./pages/NGO/AddNGOBeneficiary"; // Example extra page
 
 function App() {
   const [isGuest, setIsGuest] = useState(false);
+
   const { data: authUser, isLoading } = useQuery({
     queryKey: ["authUser"],
     queryFn: async () => {
       if (isGuest) return null;
       try {
         const res = await fetch("/api/auth/me");
-        // console.log(res)
         if (!res.ok) throw new Error("Failed to fetch user");
         return res.json();
       } catch (error) {
@@ -29,8 +29,7 @@ function App() {
     },
     enabled: !isGuest,
     retry: false,
-   });
-  
+  });
 
   if (isLoading) {
     return (
@@ -42,9 +41,8 @@ function App() {
 
   return (
     <>
-    <PaymentPage />
-    {/* <>
       <Routes>
+        {/* Protected routes with AppLayout */}
         <Route
           path="/"
           element={
@@ -54,7 +52,16 @@ function App() {
               <Navigate to="/login" />
             )
           }
-        />
+        >
+          {/* Default page */}
+          <Route index element={<HomePage />} />
+
+          {/* Example additional routes inside layout */}
+          <Route path="ngo-form" element={<NgoForm />} />
+          <Route path="payment" element={<PaymentPage />} />
+        </Route>
+
+        {/* Public routes */}
         <Route
           path="/login"
           element={!authUser && !isGuest ? <LoginPage /> : <Navigate to="/" />}
@@ -64,8 +71,7 @@ function App() {
           element={!authUser ? <SignUpPage /> : <Navigate to="/" />}
         />
       </Routes>
-    </>
-      <Toaster /> */}
+      <Toaster />
     </>
   );
 }

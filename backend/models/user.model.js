@@ -39,6 +39,22 @@ const userSchema = new mongoose.Schema(
         return this.role === "NGO" ? false : undefined;
       },
     },
+    ngoDetails: {
+      type: {
+        beneficiary_id: String,
+        name: String,
+        email: String,
+        phone: String,
+        bank_account: String,
+        ifsc: String,
+        vpa: String,
+        address1: String,
+        city: String,
+        state: String,
+        pincode: String
+      },
+      default: undefined
+    },
   },
   { timestamps: true }
 );
