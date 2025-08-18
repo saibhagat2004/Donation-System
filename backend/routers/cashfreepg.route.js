@@ -1,7 +1,7 @@
 import express from "express"
 import { protectRoute } from "../middleware/protectRoute.js";
-import {createOrder,verifyOrder,addBeneficiary} from "../controllers/cashfreepg.controller.js";
-
+// import {createOrder,verifyOrder,addBeneficiary} from "../controllers/cashfreepg.controller.js";
+import {createOrder,verifyOrder,addBeneficiary} from "../controllers/cashfreepg.controller.js"
 
 const router = express.Router();
 

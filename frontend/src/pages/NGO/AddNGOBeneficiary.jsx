@@ -227,7 +227,7 @@ export default function AddNGOBeneficiary() {
 
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
@@ -239,9 +239,10 @@ export default function AddNGOBeneficiary() {
       ...errors,
       [name]: ""
     });
-    // Clear success and error messages when user types
-    setServerError("");
-    setSuccess("");
+    // Clear success message when user starts editing
+    if (successMessage) {
+      setSuccessMessage("");
+    }
   };
 
   const validate = () => {
@@ -277,9 +278,8 @@ export default function AddNGOBeneficiary() {
         headers: { "Content-Type": "application/json" }
       });
       setServerError("");
-      setSuccess(`🎉 Beneficiary successfully added! Beneficiary ID: ${res.data.beneficiary_id}`);
-      
-      // Clear form after successful submission
+      setSuccessMessage(`Beneficiary successfully added! ID: ${res.data.beneficiary_id}`);
+      // Reset form after successful submission
       setForm({
         name: "",
         email: "",
@@ -303,7 +303,6 @@ export default function AddNGOBeneficiary() {
         errorMsg = err.response.data.error;
       }
       setServerError(errorMsg);
-      setSuccess(""); // Clear any previous success message
     }
   };
 
@@ -315,9 +314,9 @@ export default function AddNGOBeneficiary() {
           {serverError}
         </div>
       )}
-      {success && (
+      {successMessage && (
         <div className="mb-4 text-green-600 text-center font-semibold border border-green-300 bg-green-50 p-2 rounded-lg">
-          {success}
+          {successMessage}
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-8">
@@ -333,7 +332,6 @@ export default function AddNGOBeneficiary() {
               <input
                 name="name"
                 placeholder="Full Name"
-                value={form.name}
                 required
                 className={`border rounded-lg p-3 focus:outline-blue-500 ${errors.name && "border-red-500"}`}
                 onChange={handleChange}
@@ -349,7 +347,6 @@ export default function AddNGOBeneficiary() {
                 name="email"
                 type="email"
                 placeholder="Email"
-                value={form.email}
                 required
                 className={`border rounded-lg p-3 focus:outline-blue-500 ${errors.email && "border-red-500"}`}
                 onChange={handleChange}
@@ -386,7 +383,6 @@ export default function AddNGOBeneficiary() {
               <input
                 name="bank_account"
                 placeholder="Bank Account Number"
-                value={form.bank_account}
                 required
                 className={`border rounded-lg p-3 focus:outline-blue-500 ${errors.bank_account && "border-red-500"}`}
                 onChange={handleChange}
@@ -401,7 +397,6 @@ export default function AddNGOBeneficiary() {
               <input
                 name="ifsc"
                 placeholder="IFSC Code"
-                value={form.ifsc}
                 required
                 className={`border rounded-lg p-3 focus:outline-blue-500 ${errors.ifsc && "border-red-500"}`}
                 onChange={handleChange}
@@ -411,12 +406,11 @@ export default function AddNGOBeneficiary() {
             </div>
             <div className="flex flex-col">
               <label>
-                VPA (UPI ID) <span className="text-gray-400">(Optional)</span>
+                VPA/UPI ID (Optional)
               </label>
               <input
                 name="vpa"
                 placeholder="VPA/UPI ID"
-                value={form.vpa}
                 className="border rounded-lg p-3 focus:outline-blue-500"
                 onChange={handleChange}
               />

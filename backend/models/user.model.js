@@ -51,7 +51,10 @@ const userSchema = new mongoose.Schema(
         address1: String,
         city: String,
         state: String,
-        pincode: String
+        pincode: String,
+        org_name: String,
+        org_pan: String,
+        org_gst: String
       },
       default: undefined
     },
