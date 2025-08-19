@@ -12,6 +12,7 @@ import userRouter from "./routers/user.route.js"
 import cashfreepgRouter from "./routers/cashfreepg.route.js"
 import campaignRouter from "./routers/campaign.route.js"
 import ngoRouter from "./routers/ngo.route.js"
+import donationsRouter from "./routers/donations.route.js"
 
 dotenv.config(); //use to read .env content
 // cloudinary.config(
@@ -41,6 +42,7 @@ app.use("/api/users",userRouter);
 app.use("/api/cashfreepg",cashfreepgRouter);
 app.use("/api/campaigns",campaignRouter);
 app.use("/api/ngo",ngoRouter);
+app.use("/api/donations",donationsRouter);
 // app.use("/api/v2/cashfree", v2Routes); // new version
 
  

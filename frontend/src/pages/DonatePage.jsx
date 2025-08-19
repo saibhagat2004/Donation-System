@@ -150,15 +150,17 @@ export default function DonatePage() {
         withCredentials: true
       });
 
-      if (response.data) {
+      if (response.data && response.data.success) {
         const status = response.data.payment_status;
         
         if (status === "PAID") {
           toast.success("🎉 Donation successful! Thank you for your contribution.");
-          // Redirect to success page or campaign details
+          // Redirect to success page
           navigate(`/donation-success/${orderId}`);
         } else if (status === "PENDING") {
           toast.loading("Payment is being processed...");
+          // Check again after a delay
+          setTimeout(() => verifyPayment(orderId), 3000);
         } else {
           toast.error("❌ Payment failed. Please try again.");
         }

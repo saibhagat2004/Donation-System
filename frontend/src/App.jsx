@@ -14,6 +14,7 @@ import CreateCampaign from "./pages/CreateCampaign";
 import Explore from "./pages/Explore";
 import CampaignDetails from "./pages/CampaignDetails";
 import DonatePage from "./pages/DonatePage";
+import DonationSuccessPage from "./pages/DonationSuccessPage";
 
 function App() {
   const [isGuest, setIsGuest] = useState(false);
@@ -67,6 +68,7 @@ function App() {
           <Route path="create-campaign" element={<CreateCampaign />} />
           <Route path="campaign/:id" element={<CampaignDetails />} />
           <Route path="donate/:campaignId" element={<DonatePage />} />
+          <Route path="donation-success/:orderId" element={<DonationSuccessPage />} />
           <Route path="payment" element={<PaymentPage />} />
         </Route>
 

@@ -260,7 +260,7 @@ export default function Explore() {
           </div>
 
           {/* Tags Filter */}
-          <div>
+          {/* <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
             <input
               type="text"
@@ -269,7 +269,7 @@ export default function Explore() {
               onChange={(e) => handleFilterChange("tags", e.target.value)}
               className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
             />
-          </div>
+          </div> */}
 
           {/* Sort Filter */}
           <div>
