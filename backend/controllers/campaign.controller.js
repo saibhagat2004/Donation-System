@@ -246,7 +246,7 @@ export const getCampaignById = async (req, res) => {
       return res.status(404).json({ error: "Campaign not found" });
     }
 
-    return res.json({ campaign });
+    return res.json(campaign);
 
   } catch (err) {
     console.error("Get Campaign Error:", err);

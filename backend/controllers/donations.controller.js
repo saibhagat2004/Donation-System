@@ -138,7 +138,7 @@ export const updateCampaignStats = async (donation) => {
 // Calculate platform and gateway fees
 function calculateFees(amount) {
   const platformFee = 15; // Fixed ₹15 platform fee
-  const gatewayFeePercentage = 1.95; // Cashfree's fee 1.95%
+  const gatewayFeePercentage = 1.50; // Cashfree's fee 1.50%
   
   const gatewayFee = Math.round((amount * gatewayFeePercentage) / 100);
   
@@ -524,10 +524,19 @@ export const getDonationDetails = async (req, res) => {
 // Get donor's donation history
 export const getDonorHistory = async (req, res) => {
   try {
+    console.log("=== getDonorHistory called ===");
+    console.log("User:", req.user?._id);
+    
+    if (!req.user) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
     const userId = req.user._id;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+
+    console.log("Fetching donations for user:", userId);
 
     const donations = await Donation.find({ 
       donor_id: userId 
@@ -537,12 +546,22 @@ export const getDonorHistory = async (req, res) => {
     .skip(skip)
     .limit(limit);
 
+    console.log("Found donations:", donations.length);
+    console.log("Sample donation statuses:", donations.slice(0, 3).map(d => ({
+      id: d._id,
+      status: d.payment_status,
+      amount: d.amount,
+      paid_at: d.paid_at
+    })));
+
     const totalDonations = await Donation.countDocuments({ 
       donor_id: userId 
     });
 
-    // Get donor statistics
+    // Get donor statistics with enhanced debugging
+    console.log("Calling getDonorStats with userId:", userId);
     const stats = await Donation.getDonorStats(userId);
+    console.log("Stats aggregation result:", JSON.stringify(stats, null, 2));
 
     return res.json({
       success: true,
@@ -566,17 +585,18 @@ export const getDonorHistory = async (req, res) => {
         has_more: skip + donations.length < totalDonations
       },
       stats: stats[0] || {
-        total_donated: 0,
-        campaigns_count: 0,
-        first_donation: null,
-        last_donation: null
+        total_amount: 0,
+        campaigns_supported: 0,
+        total_donations: 0,
+        average_amount: 0
       }
     });
 
   } catch (error) {
     console.error("Get donor history error:", error);
     return res.status(500).json({ 
-      error: "Failed to fetch donation history" 
+      error: "Failed to fetch donation history",
+      details: error.message
     });
   }
 };

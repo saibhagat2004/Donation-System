@@ -75,9 +75,17 @@ export default function AppLayout() {
           toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
 
-        <div className="bg-gray-50 min-h-screen p-6">
-          <Outlet /> {/* Dynamic page content goes here */}
-        </div>
+<div className="bg-gray-50 min-h-screen p-6 relative overflow-hidden">
+  {/* Yellow Faded Circle Background */}
+  <div 
+    className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full translate-x-1/2 -translate-y-1/2"
+    style={{
+      background: 'radial-gradient(circle, rgba(253, 224, 71, 0.6) 0%, rgba(253, 224, 71, 0.35) 40%, rgba(253, 224, 71, 0.15) 70%, transparent 100%)'
+    }}
+  ></div>
+
+  <Outlet /> {/* Dynamic page content goes here */}
+</div>
       </div>
     </div>
   );

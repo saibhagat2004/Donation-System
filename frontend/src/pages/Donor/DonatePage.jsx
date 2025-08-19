@@ -52,19 +52,35 @@ export default function DonatePage() {
   const fetchCampaignDetails = async () => {
     try {
       setIsLoading(true);
+      console.log('Fetching campaign with ID:', campaignId);
+      
       const response = await fetch(`/api/campaigns/${campaignId}`, {
         credentials: 'include'
       });
 
+      console.log('Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Campaign not found');
+        const errorText = await response.text();
+        console.error('API Error:', errorText);
+        throw new Error(`Campaign not found (${response.status})`);
       }
 
       const data = await response.json();
-      setCampaign(data.campaign);
+      console.log('Campaign data received:', data);
+      
+      // Handle both response formats - backend now returns campaign directly
+      const campaignData = data.campaign || data;
+      
+      if (!campaignData || !campaignData._id) {
+        console.error('No valid campaign data found in response:', data);
+        throw new Error('Campaign data not found in response');
+      }
+      
+      setCampaign(campaignData);
     } catch (error) {
       console.error('Error fetching campaign:', error);
-      toast.error('Failed to load campaign details');
+      toast.error(`Failed to load campaign: ${error.message}`);
       navigate('/explore');
     } finally {
       setIsLoading(false);

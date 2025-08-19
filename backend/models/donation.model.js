@@ -318,22 +318,31 @@ donationSchema.statics.getDonorStats = function(donorId) {
     {
       $match: {
         donor_id: new mongoose.Types.ObjectId(donorId),
-        payment_status: 'PAID'
+        payment_status: { $in: ['PAID', 'SUCCESS'] } // Handle both possible status values
       }
     },
     {
       $group: {
         _id: null,
-        total_donated: { $sum: '$amount' },
+        total_amount: { $sum: '$amount' },
         campaigns_supported: { $addToSet: '$campaign_id' },
+        total_donations: { $sum: 1 },
         first_donation: { $min: '$paid_at' },
         last_donation: { $max: '$paid_at' }
       }
     },
     {
       $project: {
-        total_donated: 1,
-        campaigns_count: { $size: '$campaigns_supported' },
+        total_amount: 1,
+        campaigns_supported: { $size: '$campaigns_supported' },
+        total_donations: 1,
+        average_amount: { 
+          $cond: [
+            { $gt: ['$total_donations', 0] },
+            { $divide: ['$total_amount', '$total_donations'] },
+            0
+          ]
+        },
         first_donation: 1,
         last_donation: 1
       }

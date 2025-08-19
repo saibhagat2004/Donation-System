@@ -246,7 +246,7 @@ export default function DonationSuccessPage() {
             </button>
             
             <button
-              onClick={() => navigate('/donations/history')}
+              onClick={() => navigate('/my-donations')}
               className="flex-1 border border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-semibold hover:bg-gray-50 transition"
             >
               View Donation History
