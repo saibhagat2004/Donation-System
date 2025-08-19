@@ -289,7 +289,7 @@ donationSchema.post('save', async function(donation) {
 donationSchema.index({ donor_id: 1, createdAt: -1 });
 donationSchema.index({ campaign_id: 1, payment_status: 1 });
 donationSchema.index({ ngo_id: 1, payment_status: 1 });
-donationSchema.index({ cashfree_order_id: 1 });
+// cashfree_order_id index is already created by unique: true in field definition
 donationSchema.index({ payment_status: 1, createdAt: -1 });
 donationSchema.index({ settlement_status: 1 });
 donationSchema.index({ paid_at: -1 });

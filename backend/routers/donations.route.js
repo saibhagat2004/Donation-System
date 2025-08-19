@@ -8,7 +8,8 @@ import {
   getDonorHistory,
   getCampaignDonations,
   manualTransferToNGO,
-  getSettlementStatus
+  getSettlementStatus,
+  refreshCampaignStats
 } from "../controllers/donations.controller.js";
 
 const router = express.Router();
@@ -36,5 +37,8 @@ router.post("/transfer/:orderId", protectRoute, manualTransferToNGO);
 
 // Get settlement status for NGO
 router.get("/settlements", protectRoute, getSettlementStatus);
+
+// Refresh campaign statistics
+router.post("/refresh-stats/:campaignId", protectRoute, refreshCampaignStats);
 
 export default router;

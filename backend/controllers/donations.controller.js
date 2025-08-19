@@ -1,6 +1,7 @@
 import { Cashfree } from "cashfree-pg";
 import crypto from "crypto";
 import axios from "axios";
+import mongoose from "mongoose";
 import Donation from "../models/donation.model.js";
 import Campaign from "../models/campaign.model.js";
 import User from "../models/user.model.js";
@@ -86,12 +87,59 @@ export const transferToNGO = async (donationId) => {
   }
 };
 
+// Update campaign statistics when donation is successful
+export const updateCampaignStats = async (donation) => {
+  try {
+    console.log(`📊 Updating campaign stats for donation: ₹${donation.amount}`);
+    
+    // Update campaign with new donation
+    const updatedCampaign = await Campaign.findByIdAndUpdate(
+      donation.campaign_id,
+      {
+        $inc: { 
+          current_amount: donation.amount,
+          total_donors: 1
+        },
+        $push: {
+          donors: {
+            user_id: donation.donor_id,
+            amount: donation.amount,
+            donated_at: donation.paid_at || new Date(),
+            payment_id: donation.cashfree_order_id,
+            anonymous: donation.anonymous,
+            message: donation.donor_message || ""
+          }
+        }
+      },
+      { new: true }
+    );
+
+    if (updatedCampaign) {
+      // Calculate and update progress percentage
+      const progressPercentage = Math.min(
+        Math.round((updatedCampaign.current_amount / updatedCampaign.goal_amount) * 100),
+        100
+      );
+
+      await Campaign.findByIdAndUpdate(
+        donation.campaign_id,
+        { progress_percentage: progressPercentage }
+      );
+
+      console.log(`✅ Campaign stats updated: ₹${updatedCampaign.current_amount} raised, ${updatedCampaign.total_donors} donors, ${progressPercentage}% progress`);
+    }
+
+  } catch (error) {
+    console.error('❌ Error updating campaign stats:', error);
+    // Don't throw error as this shouldn't break the donation flow
+  }
+};
+
 // Calculate platform and gateway fees
 function calculateFees(amount) {
-  const platformFeePercentage = 1.5; // 2.5% platform fee
-  const gatewayFeePercentage = 1.36; // Cashfree's fee (approximate)
+  const platformFee = 15; // Fixed ₹15 platform fee
+  const gatewayFeePercentage = 1.95; // Cashfree's fee 1.95%
   
-  const platformFee = Math.round((amount * platformFeePercentage) / 100);
   const gatewayFee = Math.round((amount * gatewayFeePercentage) / 100);
   
   return {
@@ -263,7 +311,16 @@ export const verifyDonationPayment = async (req, res) => {
         { new: true }
       );
 
-      // 🚀 AUTO-TRANSFER TO NGO IMMEDIATELY AFTER PAYMENT SUCCESS
+      // � UPDATE CAMPAIGN STATISTICS
+      try {
+        console.log(`📊 Updating campaign statistics for donation: ${updatedDonation._id}`);
+        await updateCampaignStats(updatedDonation);
+      } catch (statsError) {
+        console.error('⚠️ Failed to update campaign stats:', statsError.message);
+        // Don't fail the payment verification
+      }
+
+      // �🚀 AUTO-TRANSFER TO NGO IMMEDIATELY AFTER PAYMENT SUCCESS
       try {
         console.log(`🔄 Starting auto-transfer for donation: ${updatedDonation._id}`);
         await transferToNGO(updatedDonation._id);
@@ -372,7 +429,15 @@ export const handleDonationWebhook = async (req, res) => {
       // Update donation record first
       const updatedDonation = await Donation.findByIdAndUpdate(donation._id, updateData, { new: true });
 
-      // 🚀 AUTO-TRANSFER TO NGO VIA WEBHOOK
+      // � UPDATE CAMPAIGN STATISTICS VIA WEBHOOK
+      try {
+        console.log(`📊 Webhook: Updating campaign statistics for donation: ${updatedDonation._id}`);
+        await updateCampaignStats(updatedDonation);
+      } catch (statsError) {
+        console.error('⚠️ Webhook: Failed to update campaign stats:', statsError.message);
+      }
+
+      // �🚀 AUTO-TRANSFER TO NGO VIA WEBHOOK
       try {
         console.log(`🔄 Webhook: Starting auto-transfer for donation: ${updatedDonation._id}`);
         await transferToNGO(updatedDonation._id);
@@ -678,6 +743,92 @@ export const getSettlementStatus = async (req, res) => {
     console.error("Get settlement status error:", error);
     return res.status(500).json({ 
       error: "Failed to fetch settlement status" 
+    });
+  }
+};
+
+// Refresh campaign statistics by recalculating from donations
+export const refreshCampaignStats = async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    const userId = req.user._id;
+
+    // Verify NGO owns this campaign
+    const campaign = await Campaign.findById(campaignId);
+    if (!campaign || campaign.created_by.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    // Get all successful donations for this campaign
+    const donationStats = await Donation.aggregate([
+      {
+        $match: {
+          campaign_id: new mongoose.Types.ObjectId(campaignId),
+          payment_status: "PAID"
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total_amount: { $sum: "$amount" },
+          total_donors: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const stats = donationStats[0] || { total_amount: 0, total_donors: 0 };
+
+    // Calculate progress percentage
+    const progressPercentage = Math.min(
+      Math.round((stats.total_amount / campaign.goal_amount) * 100),
+      100
+    );
+
+    // Get all donations with donor details for the donors array
+    const donations = await Donation.find({
+      campaign_id: campaignId,
+      payment_status: "PAID"
+    }).populate('donor_id', 'fullName');
+
+    const donorsArray = donations.map(donation => ({
+      user_id: donation.donor_id._id,
+      amount: donation.amount,
+      donated_at: donation.paid_at,
+      payment_id: donation.cashfree_order_id,
+      anonymous: donation.anonymous,
+      message: donation.donor_message || ""
+    }));
+
+    // Update campaign with correct statistics
+    const updatedCampaign = await Campaign.findByIdAndUpdate(
+      campaignId,
+      {
+        current_amount: stats.total_amount,
+        total_donors: stats.total_donors,
+        progress_percentage: progressPercentage,
+        donors: donorsArray
+      },
+      { new: true }
+    );
+
+    console.log(`📊 Campaign stats refreshed: ₹${stats.total_amount} raised, ${stats.total_donors} donors, ${progressPercentage}% progress`);
+
+    return res.json({
+      success: true,
+      message: "Campaign statistics refreshed successfully",
+      stats: {
+        campaign_id: campaignId,
+        current_amount: stats.total_amount,
+        total_donors: stats.total_donors,
+        progress_percentage: progressPercentage,
+        goal_amount: campaign.goal_amount
+      }
+    });
+
+  } catch (error) {
+    console.error("Refresh campaign stats error:", error);
+    return res.status(500).json({ 
+      error: "Failed to refresh campaign statistics" 
     });
   }
 };
