@@ -59,8 +59,16 @@ function App() {
             )
           }
         >
-          {/* Default page */}
-          <Route index element={<HomePage />} />
+          {/* Default page with role-based routing */}
+          <Route index element={
+            authUser?.role === "ngo" ? (
+              <Navigate to="/my-campaigns" replace />
+            ) : authUser?.role === "donor" ? (
+              <Navigate to="/explore" replace />
+            ) : (
+              <HomePage />
+            )
+          } />
 
           {/* Example additional routes inside layout */}
           <Route path="explore" element={<Explore />} />
