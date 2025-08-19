@@ -11,6 +11,9 @@ import PaymentPage from "./pages/PaymentPage";
 import NgoForm from "./pages/NGO/AddNGOBeneficiary"; // Example extra page
 import Campaigns from "./pages/Campaigns";
 import CreateCampaign from "./pages/CreateCampaign";
+import Explore from "./pages/Explore";
+import CampaignDetails from "./pages/CampaignDetails";
+import DonatePage from "./pages/DonatePage";
 
 function App() {
   const [isGuest, setIsGuest] = useState(false);
@@ -58,9 +61,12 @@ function App() {
           <Route index element={<HomePage />} />
 
           {/* Example additional routes inside layout */}
+          <Route path="explore" element={<Explore />} />
           <Route path="ngo-form" element={<NgoForm />} />
           <Route path="campaigns" element={<Campaigns />} />
           <Route path="create-campaign" element={<CreateCampaign />} />
+          <Route path="campaign/:id" element={<CampaignDetails />} />
+          <Route path="donate/:campaignId" element={<DonatePage />} />
           <Route path="payment" element={<PaymentPage />} />
         </Route>
 
