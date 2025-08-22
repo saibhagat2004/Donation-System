@@ -5,7 +5,7 @@ services:
     env: node
     plan: free  # Change to 'starter' or higher for production
     buildCommand: npm run build
-    startCommand: npm start
+    startCommand: cd backend && npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -24,7 +24,7 @@ services:
       - key: CASHFREE_CLIENT_SECRET
         sync: false  # Set this in Render dashboard
       - key: CASHFREE_RETURN_URL
-        value: https://your-app-name.onrender.com/payment-success
+        value: https://donation-system-33p9.onrender.com/payment-success
       - key: CASHFREE_PAYOUT_CLIENT_ID
         sync: false  # Set this in Render dashboard
       - key: CASHFREE_PAYOUT_CLIENT_SECRET
@@ -32,15 +32,17 @@ services:
       - key: CASHFREE_PAYOUT_API_VERSION
         value: "2024-01-01"
       - key: FRONTEND_URL
-        value: https://your-app-name.onrender.com
+        value: https://donation-system-33p9.onrender.com
       - key: BACKEND_URL
-        value: https://your-app-name.onrender.com
+        value: https://donation-system-33p9.onrender.com
       - key: CORS_ORIGIN
-        value: https://your-app-name.onrender.com
+        value: https://donation-system-33p9.onrender.com
       - key: MAX_FILE_SIZE
         value: "5MB"
       - key: UPLOAD_PATH
         value: "./uploads"
+      - key: VITE_GOOGLE_KEY
+        value: "192149123402-dde505u014sh32bi8rblk1feitetq9td.apps.googleusercontent.com"
     # Health check endpoint (optional)
     healthCheckPath: /api/auth/health
     # Auto-deploy from main branch

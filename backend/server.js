@@ -3,6 +3,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import bodyParser from 'body-parser';
+import cors from "cors";
 // import {v2 as cloudinary} from "cloudinary"
 import connectMongoDB  from "./db/connectMongoDB.js";
 import cookieParser from "cookie-parser";
@@ -27,6 +28,14 @@ const app = express();
 app.use(bodyParser.json());
 const PORT=process.env.PORT || 5000
 const __dirname =path.resolve()
+
+// CORS configuration
+const corsOptions = {
+    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 
 app.use(express.json({limit:"5mb"}));  //for parse req.body     also make sure limit limit should not me to large as it can be missuse  and can be attack.
 app.use(express.urlencoded({extended:true})); //to parse from data(urlencoded)
@@ -53,10 +62,11 @@ app.get("/api/auth/health", (req, res) => {
 
  
  if (process.env.NODE_ENV === "production") {         //if we not hit our endpoint run this
-	app.use(express.static(path.join(__dirname, "/frontend/dist")));
+	const frontendDistPath = path.join(__dirname, "../frontend/dist");
+	app.use(express.static(frontendDistPath));
 
 	app.get("*", (req, res) => {
-		res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
+		res.sendFile(path.resolve(frontendDistPath, "index.html"));
 	});
 }
 
