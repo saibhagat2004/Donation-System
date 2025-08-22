@@ -1,0 +1,54 @@
+services:
+  # Web Service (Backend + Frontend)
+  - type: web
+    name: donation-system
+    env: node
+    plan: free  # Change to 'starter' or higher for production
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        fromService:
+          type: web
+          name: donation-system
+          property: port
+      # Add your environment variables here
+      - key: MONGO_URI
+        sync: false  # Set this in Render dashboard
+      - key: JWT_SECRET
+        sync: false  # Set this in Render dashboard
+      - key: CASHFREE_CLIENT_ID
+        sync: false  # Set this in Render dashboard
+      - key: CASHFREE_CLIENT_SECRET
+        sync: false  # Set this in Render dashboard
+      - key: CASHFREE_RETURN_URL
+        value: https://your-app-name.onrender.com/payment-success
+      - key: CASHFREE_PAYOUT_CLIENT_ID
+        sync: false  # Set this in Render dashboard
+      - key: CASHFREE_PAYOUT_CLIENT_SECRET
+        sync: false  # Set this in Render dashboard
+      - key: CASHFREE_PAYOUT_API_VERSION
+        value: "2024-01-01"
+      - key: FRONTEND_URL
+        value: https://your-app-name.onrender.com
+      - key: BACKEND_URL
+        value: https://your-app-name.onrender.com
+      - key: CORS_ORIGIN
+        value: https://your-app-name.onrender.com
+      - key: MAX_FILE_SIZE
+        value: "5MB"
+      - key: UPLOAD_PATH
+        value: "./uploads"
+    # Health check endpoint (optional)
+    healthCheckPath: /api/auth/health
+    # Auto-deploy from main branch
+    autoDeploy: true
+    # Build settings
+    rootDir: .
+    # Runtime settings
+    disk:
+      name: donation-system-disk
+      mountPath: /opt/render/project/src/uploads
+      sizeGB: 1

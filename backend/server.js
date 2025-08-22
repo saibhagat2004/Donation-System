@@ -43,6 +43,12 @@ app.use("/api/cashfreepg",cashfreepgRouter);
 app.use("/api/campaigns",campaignRouter);
 app.use("/api/ngo",ngoRouter);
 app.use("/api/donations",donationsRouter);
+
+// Health check endpoint for Render
+app.get("/api/auth/health", (req, res) => {
+    res.status(200).json({ status: "OK", message: "Server is running" });
+});
+
 // app.use("/api/v2/cashfree", v2Routes); // new version
 
  
