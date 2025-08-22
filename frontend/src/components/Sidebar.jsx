@@ -121,7 +121,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
         &times;
       </button>
 
-      <h2 className="text-2xl font-bold mb-6">Giving Block</h2>
+      <h2 className="text-2xl font-bold mb-6">Hope Chain</h2>
 
       <nav className="flex flex-col space-y-2">
         {items.map((item) => (

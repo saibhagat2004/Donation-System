@@ -35,7 +35,8 @@ export const createOrder = async (req, res) => {
         customer_email: "guest@example.com",
       },
       order_meta: {
-        return_url: process.env.CASHFREE_RETURN_URL,
+        return_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success`,
+        notify_url: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/cashfreepg/webhook`
       },
     };
 
@@ -167,5 +168,48 @@ export const addBeneficiary = async (req, res) => {
     return res.status(err.response?.status || 500).json({
       error: errorMessage
     });
+  }
+};
+
+// Handle Cashfree webhooks
+export const handleWebhook = async (req, res) => {
+  try {
+    console.log("Cashfree webhook received:", req.body);
+    
+    // Verify webhook signature here if needed
+    const webhookData = req.body;
+    
+    // Process webhook data based on event type
+    if (webhookData.type === 'PAYMENT_SUCCESS_WEBHOOK') {
+      console.log("Payment successful:", webhookData.data.order.order_id);
+      // Handle successful payment
+    } else if (webhookData.type === 'PAYMENT_FAILED_WEBHOOK') {
+      console.log("Payment failed:", webhookData.data.order.order_id);
+      // Handle failed payment
+    }
+    
+    // Always respond with 200 to acknowledge receipt
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Webhook processing error:", error);
+    res.status(200).json({ success: true }); // Still acknowledge to prevent retries
+  }
+};
+
+// Handle payment return/redirect
+export const handlePaymentReturn = async (req, res) => {
+  try {
+    const { order_id, order_status } = req.query;
+    
+    if (order_status === 'PAID') {
+      // Redirect to success page
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success?order_id=${order_id}&status=success`);
+    } else {
+      // Redirect to failure page
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success?order_id=${order_id}&status=failed`);
+    }
+  } catch (error) {
+    console.error("Payment return handling error:", error);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success?status=error`);
   }
 };

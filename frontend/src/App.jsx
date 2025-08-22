@@ -8,6 +8,7 @@ import SignUpPage from "./pages/auth/SignUpPage";
 import LoadingSpinner from "./components/LoadingSpinner";
 import AppLayout from "./components/AppLayout";
 import PaymentPage from "./pages/PaymentPage";
+import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import NgoForm from "./pages/NGO/AddNGOBeneficiary"; // Example extra page
 import MyCampaigns from "./pages/MyCampaigns";
 import CreateCampaign from "./pages/NGO/CreateCampaign";
@@ -80,6 +81,7 @@ function App() {
           <Route path="my-donations" element={<MyDonations />} />
           <Route path="donation-success/:orderId" element={<DonationSuccessPage />} />
           <Route path="payment" element={<PaymentPage />} />
+          <Route path="payment-success" element={<PaymentSuccessPage />} />
         </Route>
 
         {/* Public routes */}

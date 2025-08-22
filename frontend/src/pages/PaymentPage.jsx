@@ -72,9 +72,12 @@ const verifyPayment = async () => {
       }
 
       cashfree.checkout(checkoutOptions).then((res) => {
-        console.log("payment initialized")
-
-        verifyPayment(orderId)
+        console.log("payment initialized", res)
+        
+        // Add a delay before verifying payment to ensure Cashfree has processed it
+        setTimeout(() => {
+          verifyPayment();
+        }, 2000);
       })
 
 

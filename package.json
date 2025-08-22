@@ -1,5 +1,10 @@
 {
-  "dependencies": {
-    "multer": "^2.0.2"
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run start --prefix frontend\"",
+    "start": "npm run build --prefix frontend && npm run start --prefix backend",
+    "build": "npm install && npm install --prefix frontend && npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^6.0.0"
   }
 }
