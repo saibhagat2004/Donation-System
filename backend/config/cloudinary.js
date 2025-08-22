@@ -5,9 +5,14 @@ dotenv.config();
 
 // Check if Cloudinary credentials are provided
 if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.warn('⚠️  Cloudinary credentials not found in environment variables.');
-  console.warn('Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET');
-  console.warn('Image uploads will fail until these are configured.');
+  console.error('❌ CLOUDINARY CREDENTIALS MISSING!');
+  console.error('⚠️  Please set the following environment variables:');
+  console.error('   - CLOUDINARY_CLOUD_NAME');
+  console.error('   - CLOUDINARY_API_KEY');
+  console.error('   - CLOUDINARY_API_SECRET');
+  console.error('💡 In Render: Go to Environment tab and add these variables');
+  console.error('📱 Image uploads will fail until these are configured.');
+  console.error('='.repeat(60));
 }
 
 // Configure Cloudinary
@@ -21,6 +26,11 @@ cloudinary.config({
 export const uploadToCloudinary = async (fileBuffer, folder = 'donation-system') => {
   try {
     console.log(`Cloudinary upload - Buffer size: ${fileBuffer ? fileBuffer.length : 0} bytes, Folder: ${folder}`);
+    
+    // Check credentials before attempting upload
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      throw new Error('Cloudinary credentials not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.');
+    }
     
     if (!fileBuffer || fileBuffer.length === 0) {
       throw new Error('No file buffer provided or buffer is empty');

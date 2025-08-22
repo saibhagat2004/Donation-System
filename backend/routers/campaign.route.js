@@ -24,7 +24,6 @@ router.post("/create",
     { name: 'logo', maxCount: 1 },
     { name: 'activity_photos', maxCount: 20 }
   ]), 
-  debugRequest, // Add debug middleware temporarily
   createCampaign
 ); // Create new campaign
 

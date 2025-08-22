@@ -139,9 +139,12 @@ export default function CampaignDetails() {
             {campaign.logo && (
               <div className="mb-6">
                 <img 
-                  src={`http://localhost:5000/${campaign.logo}`} 
+                  src={campaign.logo} 
                   alt={campaign.title}
                   className="w-full h-64 object-cover rounded-lg"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
                 />
               </div>
             )}
@@ -191,9 +194,12 @@ export default function CampaignDetails() {
                       {campaign.activity_photos.map((photo, index) => (
                         <img
                           key={index}
-                          src={`http://localhost:5000/${photo}`}
+                          src={photo}
                           alt={`Activity ${index + 1}`}
                           className="w-full h-48 object-cover rounded-lg"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
                         />
                       ))}
                     </div>

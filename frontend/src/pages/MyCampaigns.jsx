@@ -285,9 +285,13 @@ export default function Campaigns() {
                 <div className="h-48 bg-gradient-to-r from-blue-500 to-purple-600 rounded-t-xl relative overflow-hidden">
                   {campaign.logo ? (
                     <img 
-                      src={`http://localhost:5000/${campaign.logo}`} 
+                      src={campaign.logo} 
                       alt={campaign.title}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback to gradient background if image fails to load
+                        e.target.style.display = 'none';
+                      }}
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full text-white text-lg font-semibold">

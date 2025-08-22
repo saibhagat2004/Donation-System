@@ -274,9 +274,12 @@ export default function MyDonations() {
                       <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
                         {donation.campaign.logo ? (
                           <img 
-                            src={`http://localhost:5000/${donation.campaign.logo}`} 
+                            src={donation.campaign.logo} 
                             alt={donation.campaign.title}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
                           />
                         ) : (
                           <span className="text-white text-lg font-semibold">
