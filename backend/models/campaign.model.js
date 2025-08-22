@@ -100,15 +100,29 @@ const campaignSchema = new mongoose.Schema(
     },
     // Image file paths/URLs
     logo: {
-      type: String, // Will store file path or URL
+      type: String, // Will store Cloudinary URL
+      default: ""
+    },
+    logo_public_id: {
+      type: String, // Cloudinary public ID for deletion
       default: ""
     },
     activity_photos: {
-      type: [String], // Array of file paths or URLs
+      type: [String], // Array of Cloudinary URLs
       default: [],
       validate: {
         validator: function(photos) {
           return photos.length <= 20; // Maximum 20 photos
+        },
+        message: "Maximum 20 activity photos allowed"
+      }
+    },
+    activity_photos_public_ids: {
+      type: [String], // Array of Cloudinary public IDs for deletion
+      default: [],
+      validate: {
+        validator: function(publicIds) {
+          return publicIds.length <= 20; // Maximum 20 photos
         },
         message: "Maximum 20 activity photos allowed"
       }

@@ -14,6 +14,7 @@ import cashfreepgRouter from "./routers/cashfreepg.route.js"
 import campaignRouter from "./routers/campaign.route.js"
 import ngoRouter from "./routers/ngo.route.js"
 import donationsRouter from "./routers/donations.route.js"
+import testRouter from "./routers/test.route.js"
 
 dotenv.config(); //use to read .env content
 // cloudinary.config(
@@ -46,12 +47,18 @@ app.use(cookieParser());  // parses cookies attached to the client request objec
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Serve test page for upload debugging
+app.get('/test-upload', (req, res) => {
+    res.sendFile(path.join(__dirname, 'test-upload.html'));
+});
+
 app.use("/api/auth",authRoutes);
 app.use("/api/users",userRouter);
 app.use("/api/cashfreepg",cashfreepgRouter);
 app.use("/api/campaigns",campaignRouter);
 app.use("/api/ngo",ngoRouter);
 app.use("/api/donations",donationsRouter);
+app.use("/api/test",testRouter);
 
 // Health check endpoint for Render
 app.get("/api/auth/health", (req, res) => {

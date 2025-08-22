@@ -5,10 +5,11 @@ import {
   getCampaignById, 
   updateCampaign, 
   deleteCampaign,
-  donateToCampaign,
-  upload 
+  donateToCampaign
 } from "../controllers/campaign.controller.js";
 import { protectRoute } from "../middleware/protectRoute.js";
+import { uploadMemory, handleMulterError } from "../middleware/uploadMiddleware.js";
+import { debugRequest } from "../middleware/debugMiddleware.js";
 
 const router = express.Router();
 
@@ -19,12 +20,16 @@ router.get("/:id", getCampaignById); // Get single campaign
 // Protected routes (require authentication)
 router.post("/create", 
   protectRoute, 
-  upload.fields([
+  uploadMemory.fields([
     { name: 'logo', maxCount: 1 },
     { name: 'activity_photos', maxCount: 20 }
   ]), 
+  debugRequest, // Add debug middleware temporarily
   createCampaign
 ); // Create new campaign
+
+// Add error handling middleware after the route
+router.use(handleMulterError);
 
 router.put("/:id", protectRoute, updateCampaign); // Update campaign
 router.delete("/:id", protectRoute, deleteCampaign); // Delete campaign

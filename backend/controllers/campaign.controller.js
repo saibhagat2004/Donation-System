@@ -1,43 +1,6 @@
 import Campaign from "../models/campaign.model.js";
 import User from "../models/user.model.js";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = "uploads/campaigns";
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    // Generate unique filename: timestamp_originalname
-    const uniqueSuffix = Date.now() + '_' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '_' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  // Accept only image files
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed!'), false);
-  }
-};
-
-export const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB per file
-    files: 21 // 1 logo + 20 activity photos max
-  }
-});
+import { uploadToCloudinary, uploadMultipleToCloudinary, deleteFromCloudinary } from "../config/cloudinary.js";
 
 // Create new campaign
 export const createCampaign = async (req, res) => {
@@ -66,7 +29,34 @@ export const createCampaign = async (req, res) => {
     console.log("Creating campaign for NGO:", user.fullName);
     console.log("Beneficiary ID:", user.ngoDetails.beneficiary_id);
     console.log("Request body:", req.body);
-    console.log("Files:", req.files);
+    console.log("Files received:", req.files);
+    
+    // Debug file information
+    if (req.files) {
+      if (req.files.logo) {
+        console.log("Logo file details:", {
+          fieldname: req.files.logo[0]?.fieldname,
+          originalname: req.files.logo[0]?.originalname,
+          mimetype: req.files.logo[0]?.mimetype,
+          size: req.files.logo[0]?.size,
+          hasBuffer: !!req.files.logo[0]?.buffer
+        });
+      }
+      if (req.files.activity_photos) {
+        console.log("Activity photos count:", req.files.activity_photos.length);
+        req.files.activity_photos.forEach((file, index) => {
+          console.log(`Photo ${index + 1}:`, {
+            fieldname: file.fieldname,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+            hasBuffer: !!file.buffer
+          });
+        });
+      }
+    } else {
+      console.log("No files received in request");
+    }
 
     const {
       title, description, goal_amount, category, start_date, end_date,
@@ -98,20 +88,69 @@ export const createCampaign = async (req, res) => {
       return res.status(400).json({ error: "End date must be after start date" });
     }
 
-    // Process uploaded files
-    let logoPath = "";
+    // Process uploaded files with Cloudinary
+    let logoUrl = "";
+    let logoPublicId = "";
     let activityPhotos = [];
+    let activityPhotoPublicIds = [];
 
-    if (req.files) {
-      // Handle logo
-      if (req.files.logo && req.files.logo[0]) {
-        logoPath = req.files.logo[0].path;
-      }
+    console.log("Starting file upload process...");
 
-      // Handle activity photos
-      if (req.files.activity_photos) {
-        activityPhotos = req.files.activity_photos.map(file => file.path);
+    try {
+      if (req.files && Object.keys(req.files).length > 0) {
+        console.log("Files found, processing uploads...");
+        
+        // Handle logo upload to Cloudinary
+        if (req.files.logo && req.files.logo[0]) {
+          console.log("Uploading logo to Cloudinary...");
+          console.log("Logo buffer size:", req.files.logo[0].buffer?.length || 0, "bytes");
+          
+          const logoResult = await uploadToCloudinary(
+            req.files.logo[0].buffer, 
+            'donation-system/campaigns/logos'
+          );
+          logoUrl = logoResult.url;
+          logoPublicId = logoResult.public_id;
+          console.log("Logo uploaded successfully:", logoUrl);
+        } else {
+          console.log("No logo file found or file is empty");
+        }
+
+        // Handle activity photos upload to Cloudinary
+        if (req.files.activity_photos && req.files.activity_photos.length > 0) {
+          console.log(`Uploading ${req.files.activity_photos.length} activity photos to Cloudinary...`);
+          
+          // Check if all files have buffers
+          const validFiles = req.files.activity_photos.filter(file => file.buffer && file.buffer.length > 0);
+          console.log(`Valid files with buffers: ${validFiles.length}/${req.files.activity_photos.length}`);
+          
+          if (validFiles.length > 0) {
+            const photoBuffers = validFiles.map(file => file.buffer);
+            const photoResults = await uploadMultipleToCloudinary(
+              photoBuffers, 
+              'donation-system/campaigns/activity-photos'
+            );
+            
+            activityPhotos = photoResults.map(result => result.url);
+            activityPhotoPublicIds = photoResults.map(result => result.public_id);
+            console.log("Activity photos uploaded successfully:", activityPhotos.length, "photos");
+            console.log("Photo URLs:", activityPhotos);
+          } else {
+            console.log("No valid activity photos with buffers found");
+          }
+        } else {
+          console.log("No activity photos found");
+        }
+      } else {
+        console.log("No files in request");
       }
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
+      console.error("Upload error stack:", uploadError.stack);
+      return res.status(500).json({ 
+        error: "Failed to upload images. Please try again.",
+        details: uploadError.message 
+      });
     }
 
     // Create campaign object
@@ -129,8 +168,10 @@ export const createCampaign = async (req, res) => {
       contact_phone: contact_phone.trim(),
       beneficiary_details: beneficiary_details?.trim() || "",
       tags: tags || "",
-      logo: logoPath,
+      logo: logoUrl,
+      logo_public_id: logoPublicId,
       activity_photos: activityPhotos,
+      activity_photos_public_ids: activityPhotoPublicIds,
       created_by: req.user._id,
       beneficiary_id: user.ngoDetails.beneficiary_id, // Add beneficiary ID from NGO details
       campaign_status: "active"
@@ -303,15 +344,24 @@ export const deleteCampaign = async (req, res) => {
       return res.status(403).json({ error: "You can only delete your own campaigns" });
     }
 
-    // Delete associated files
-    if (campaign.logo && fs.existsSync(campaign.logo)) {
-      fs.unlinkSync(campaign.logo);
-    }
-    campaign.activity_photos.forEach(photo => {
-      if (fs.existsSync(photo)) {
-        fs.unlinkSync(photo);
+    // Delete associated images from Cloudinary
+    try {
+      if (campaign.logo_public_id) {
+        await deleteFromCloudinary(campaign.logo_public_id);
+        console.log("Logo deleted from Cloudinary:", campaign.logo_public_id);
       }
-    });
+      
+      if (campaign.activity_photos_public_ids && campaign.activity_photos_public_ids.length > 0) {
+        const deletePromises = campaign.activity_photos_public_ids.map(publicId => 
+          deleteFromCloudinary(publicId)
+        );
+        await Promise.all(deletePromises);
+        console.log("Activity photos deleted from Cloudinary:", campaign.activity_photos_public_ids.length, "photos");
+      }
+    } catch (deleteError) {
+      console.error("Error deleting images from Cloudinary:", deleteError);
+      // Continue with campaign deletion even if image deletion fails
+    }
 
     // Delete campaign
     await Campaign.findByIdAndDelete(id);

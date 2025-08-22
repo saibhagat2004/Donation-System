@@ -48,6 +48,9 @@ A full-stack MERN application for managing donations and campaigns.
    - `JWT_SECRET`: A secure random string for JWT tokens
    - `CASHFREE_CLIENT_ID`: Your Cashfree client ID
    - `CASHFREE_CLIENT_SECRET`: Your Cashfree client secret
+   - `CLOUDINARY_CLOUD_NAME`: Your Cloudinary cloud name
+   - `CLOUDINARY_API_KEY`: Your Cloudinary API key
+   - `CLOUDINARY_API_SECRET`: Your Cloudinary API secret
    
    **Optional:**
    - `CASHFREE_PAYOUT_CLIENT_ID`: For payout functionality
@@ -78,7 +81,7 @@ A full-stack MERN application for managing donations and campaigns.
 - **Backend**: Node.js, Express.js, MongoDB, Mongoose
 - **Authentication**: JWT, bcryptjs
 - **Payment**: Cashfree Payment Gateway
-- **File Upload**: Multer
+- **File Upload**: Cloudinary for image storage and optimization
 
 ### Scripts
 - `npm run dev`: Start development servers (both frontend and backend)
