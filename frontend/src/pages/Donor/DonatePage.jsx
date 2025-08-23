@@ -11,6 +11,8 @@ export default function DonatePage() {
   const [campaign, setCampaign] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPaymentSuccess, setIsPaymentSuccess] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState('verifying'); // 'verifying', 'success', 'failed'
   const [cashfree, setCashfree] = useState(null);
   
   // Donation form state
@@ -187,19 +189,29 @@ export default function DonatePage() {
         const status = response.data.payment_status;
         
         if (status === "PAID") {
+          setVerificationStatus('success');
           toast.success("🎉 Donation successful! Thank you for your contribution.");
-          // Redirect to success page
-          navigate(`/donation-receipt/${orderId}`);
+          
+          // Navigate to receipt page
+          setTimeout(() => {
+            navigate(`/donation-receipt/${orderId}`);
+          }, 1500);
         } else if (status === "PENDING") {
+          // Keep the loading animation for pending payments
           toast.loading("Payment is being processed...");
           // Check again after a delay
           setTimeout(() => verifyPayment(orderId), 3000);
         } else {
+          // Payment failed - hide success animation
+          setVerificationStatus('failed');
+          setIsPaymentSuccess(false);
           toast.error("❌ Payment failed. Please try again.");
         }
       }
     } catch (error) {
       console.error('Payment verification error:', error);
+      setVerificationStatus('failed');
+      setIsPaymentSuccess(false);
       toast.error("Error verifying payment. Please contact support if amount was deducted.");
     }
   };
@@ -227,6 +239,9 @@ export default function DonatePage() {
       cashfree.checkout(checkoutOptions).then((result) => {
         console.log("Payment modal closed:", result);
         
+        // Show success animation immediately when modal closes
+        setIsPaymentSuccess(true);
+        
         // Verify payment after modal closes
         setTimeout(() => {
           verifyPayment(orderId);
@@ -234,6 +249,7 @@ export default function DonatePage() {
       }).catch((error) => {
         console.error("Checkout error:", error);
         toast.error("Payment checkout failed");
+        setIsPaymentSuccess(false);
       });
 
     } catch (error) {
@@ -296,8 +312,83 @@ export default function DonatePage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      {/* Header */}
-      <div className="mb-6">
+      {/* Success Loading Overlay */}
+      {isPaymentSuccess && (
+        <div className="fixed inset-0 bg-white bg-opacity-95 backdrop-blur-sm flex items-center justify-center z-50">
+          {/* Floating particles */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="absolute w-2 h-2 bg-green-400 rounded-full animate-bounce opacity-60"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  animationDelay: `${Math.random() * 2}s`,
+                  animationDuration: `${2 + Math.random() * 2}s`
+                }}
+              />
+            ))}
+          </div>
+          
+          <div className="bg-white rounded-2xl p-8 mx-4 max-w-md w-full text-center shadow-2xl transform animate-scale-in">
+            {/* Success Animation */}
+            <div className="relative mb-6">
+              <div className="w-20 h-20 mx-auto bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center animate-enhanced-bounce shadow-lg">
+                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              {/* Multiple ripple effects */}
+              <div className="absolute inset-0 w-20 h-20 mx-auto bg-green-300 rounded-full animate-ping opacity-30"></div>
+              <div className="absolute inset-0 w-20 h-20 mx-auto bg-green-400 rounded-full animate-ping opacity-20" style={{animationDelay: '0.5s'}}></div>
+            </div>
+            
+            {/* Success Message */}
+            {verificationStatus === 'verifying' && (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">🔄 Processing Payment...</h2>
+                <p className="text-gray-600 mb-6">Please wait while we verify your payment</p>
+              </>
+            )}
+            {verificationStatus === 'success' && (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">🎉 Payment Successful!</h2>
+                <p className="text-gray-600 mb-6">Thank you for your generous donation</p>
+              </>
+            )}
+            {verificationStatus === 'failed' && (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">❌ Payment Failed</h2>
+                <p className="text-gray-600 mb-6">Please try again or contact support</p>
+              </>
+            )}
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full animate-pulse" style={{width: '100%', animation: 'progress 2.5s ease-in-out'}}></div>
+            </div>
+            
+            {/* Loading Dots */}
+            <div className="flex justify-center space-x-1 mb-4">
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            </div>
+            
+            <p className="text-sm text-gray-500">
+              {verificationStatus === 'verifying' && 'Verifying your payment...'}
+              {verificationStatus === 'success' && 'Redirecting to receipt...'}
+              {verificationStatus === 'failed' && 'Payment verification failed'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content with conditional blur */}
+      <div className={isPaymentSuccess ? 'blur-sm pointer-events-none' : ''}>
+        {/* Header */}
+        <div className="mb-6">
         <button
           onClick={() => navigate(-1)}
           className="flex items-center text-gray-600 hover:text-gray-900 transition mb-4"
@@ -598,6 +689,7 @@ export default function DonatePage() {
           </div>
         </div>
       </div>
+      </div> {/* Close blur wrapper */}
     </div>
   );
 }
