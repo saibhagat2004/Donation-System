@@ -35,7 +35,7 @@ export const createOrder = async (req, res) => {
         customer_email: "guest@example.com",
       },
       order_meta: {
-        return_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success`,
+        return_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-verification`,
         notify_url: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/cashfreepg/webhook`
       },
     };
@@ -203,13 +203,13 @@ export const handlePaymentReturn = async (req, res) => {
     
     if (order_status === 'PAID') {
       // Redirect to success page
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success?order_id=${order_id}&status=success`);
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-verification?order_id=${order_id}&status=success`);
     } else {
       // Redirect to failure page
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success?order_id=${order_id}&status=failed`);
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-verification?order_id=${order_id}&status=failed`);
     }
   } catch (error) {
     console.error("Payment return handling error:", error);
-    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success?status=error`);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-verification?status=error`);
   }
 };

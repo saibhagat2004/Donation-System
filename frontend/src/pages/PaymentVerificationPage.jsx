@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-export default function PaymentSuccessPage() {
+export default function PaymentVerificationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [paymentStatus, setPaymentStatus] = useState('loading');
@@ -29,6 +29,10 @@ export default function PaymentSuccessPage() {
         setPaymentDetails(response.data);
         if (response.data.order_status === 'PAID') {
           setPaymentStatus('success');
+          // Redirect to donation receipt after 2 seconds
+          setTimeout(() => {
+            navigate(`/donation-receipt/${orderId}`);
+          }, 2000);
         } else {
           setPaymentStatus('failed');
         }
@@ -119,10 +123,10 @@ export default function PaymentSuccessPage() {
         <div className="space-y-3">
           {paymentStatus === 'success' && (
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(`/donation-receipt/${orderId}`)}
               className="w-full bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition"
             >
-              Continue to Dashboard
+              View Donation Receipt
             </button>
           )}
           

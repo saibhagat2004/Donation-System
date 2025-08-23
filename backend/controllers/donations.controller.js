@@ -36,13 +36,28 @@ export const transferToNGO = async (donationId) => {
       return;
     }
 
-    // Cashfree Payout API call
+    // Check if NGO has complete beneficiary details
+    const ngo = donation.ngo_id;
+    if (!ngo.ngoDetails || !ngo.ngoDetails.beneficiary_id || !ngo.ngoDetails.name) {
+      throw new Error('NGO beneficiary details incomplete - missing beneficiary_id or name');
+    }
+
+    // Generate shorter transfer ID (max 40 chars)
+    const shortDonationId = donation._id.toString().slice(-12); // Last 12 chars of donation ID
+    const timestamp = Date.now().toString().slice(-8); // Last 8 digits of timestamp
+    const transferId = `TXN_${timestamp}_${shortDonationId}`; // Max 35 chars: TXN_ + 8 + _ + 12
+    
+    // Cashfree Payout API call with beneficiary details
     const transferPayload = {
-      transfer_id: `TXN_${Date.now()}_${donation._id}`,
+      transfer_id: transferId,
       transfer_amount: donation.net_amount, // Amount after deducting fees
       beneficiary_id: donation.beneficiary_id,
       transfer_mode: "banktransfer",
-      remarks: `Donation settlement for: ${donation.campaign_id.title}`
+      remarks: `Donation settlement for: ${donation.campaign_id.title}`,
+      beneficiary_details: {
+        beneficiary_name: ngo.ngoDetails.name,
+        beneficiary_id: donation.beneficiary_id
+      }
     };
 
     const headers = {
@@ -57,7 +72,7 @@ export const transferToNGO = async (donationId) => {
       ? "https://sandbox.cashfree.com/payout/transfers"
       : "https://api.cashfree.com/payout/transfers";
 
-    console.log(`🔄 Initiating transfer to NGO: ₹${donation.net_amount} to ${donation.beneficiary_id}`);
+    console.log(`🔄 Initiating transfer: ₹${donation.net_amount} to ${donation.beneficiary_id}`);
 
     const response = await axios.post(payoutUrl, transferPayload, { headers });
 
@@ -69,8 +84,7 @@ export const transferToNGO = async (donationId) => {
       settled_at: new Date()
     });
 
-    console.log(`✅ NGO transfer successful: ${response.data.transfer_id}`);
-    console.log(`💰 Amount: ₹${donation.net_amount} transferred to ${donation.beneficiary_id}`);
+    console.log(`✅ Transfer successful: ${response.data.transfer_id} - ₹${donation.net_amount}`);
     
     return response.data;
 
@@ -90,8 +104,6 @@ export const transferToNGO = async (donationId) => {
 // Update campaign statistics when donation is successful
 export const updateCampaignStats = async (donation) => {
   try {
-    console.log(`📊 Updating campaign stats for donation: ₹${donation.amount}`);
-    
     // Update campaign with new donation
     const updatedCampaign = await Campaign.findByIdAndUpdate(
       donation.campaign_id,
@@ -126,7 +138,7 @@ export const updateCampaignStats = async (donation) => {
         { progress_percentage: progressPercentage }
       );
 
-      console.log(`✅ Campaign stats updated: ₹${updatedCampaign.current_amount} raised, ${updatedCampaign.total_donors} donors, ${progressPercentage}% progress`);
+      console.log(`📊 Campaign updated: ₹${updatedCampaign.current_amount} raised, ${updatedCampaign.total_donors} donors`);
     }
 
   } catch (error) {
@@ -158,7 +170,12 @@ export const createDonationOrder = async (req, res) => {
     // Validate required fields
     if (!campaignId || !amount || !donorInfo) {
       return res.status(400).json({ 
-        error: "Campaign ID, amount, and donor information are required" 
+        error: "Campaign ID, amount, and donor information are required",
+        details: {
+          campaignId: !campaignId ? "missing" : "present",
+          amount: !amount ? "missing" : "present", 
+          donorInfo: !donorInfo ? "missing" : "present"
+        }
       });
     }
 
@@ -177,14 +194,17 @@ export const createDonationOrder = async (req, res) => {
     // Check if campaign is active
     const now = new Date();
     if (campaign.end_date < now) {
-      return res.status(400).json({ error: "Campaign has ended" });
+      const endDate = new Date(campaign.end_date).toLocaleDateString('en-IN');
+      return res.status(400).json({ 
+        error: `Campaign ended on ${endDate}. Donations are no longer accepted for this campaign.` 
+      });
     }
 
     // Get NGO details for beneficiary_id
     const ngo = campaign.created_by;
     if (!ngo.ngoDetails || !ngo.ngoDetails.beneficiary_id) {
       return res.status(400).json({ 
-        error: "NGO beneficiary details not found. Please contact the campaign organizer." 
+        error: "Campaign payment setup incomplete. The NGO hasn't configured their payment details yet. Please contact the campaign organizer." 
       });
     }
 
@@ -206,7 +226,7 @@ export const createDonationOrder = async (req, res) => {
         customer_email: donorInfo.email,
       },
       order_meta: {
-        return_url: `${process.env.FRONTEND_URL}/donation-success`,
+        return_url: `${process.env.FRONTEND_URL}/payment-verification`,
         notify_url: `${process.env.BACKEND_URL}/api/donations/webhook`,
         campaign_id: campaignId,
         donor_id: userId.toString()
@@ -245,7 +265,7 @@ export const createDonationOrder = async (req, res) => {
 
     await donation.save();
 
-    return res.json({
+    const response = {
       success: true,
       order_id: orderLd,
       payment_session_id: cashfreeResponse.data.payment_session_id,
@@ -256,12 +276,17 @@ export const createDonationOrder = async (req, res) => {
         gateway_fee: gatewayFee,
         net_amount: netAmount
       }
-    });
+    };
+
+    console.log(`💰 Donation order created: ${orderLd} - ₹${amount} for ${campaign.title}`);
+    return res.json(response);
 
   } catch (error) {
-    console.error("Create donation order error:", error);
+    console.error("❌ Create donation order error:", error.message);
+    
     return res.status(500).json({ 
-      error: error.message || "Failed to create donation order" 
+      error: error.message || "Failed to create donation order",
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -313,7 +338,6 @@ export const verifyDonationPayment = async (req, res) => {
 
       // � UPDATE CAMPAIGN STATISTICS
       try {
-        console.log(`📊 Updating campaign statistics for donation: ${updatedDonation._id}`);
         await updateCampaignStats(updatedDonation);
       } catch (statsError) {
         console.error('⚠️ Failed to update campaign stats:', statsError.message);
@@ -322,9 +346,7 @@ export const verifyDonationPayment = async (req, res) => {
 
       // �🚀 AUTO-TRANSFER TO NGO IMMEDIATELY AFTER PAYMENT SUCCESS
       try {
-        console.log(`🔄 Starting auto-transfer for donation: ${updatedDonation._id}`);
         await transferToNGO(updatedDonation._id);
-        console.log(`✅ Auto-transfer completed successfully`);
       } catch (transferError) {
         console.error('⚠️ Auto-transfer to NGO failed:', transferError.message);
         // Don't fail the main payment verification, but log the error
@@ -431,7 +453,6 @@ export const handleDonationWebhook = async (req, res) => {
 
       // � UPDATE CAMPAIGN STATISTICS VIA WEBHOOK
       try {
-        console.log(`📊 Webhook: Updating campaign statistics for donation: ${updatedDonation._id}`);
         await updateCampaignStats(updatedDonation);
       } catch (statsError) {
         console.error('⚠️ Webhook: Failed to update campaign stats:', statsError.message);
@@ -439,9 +460,7 @@ export const handleDonationWebhook = async (req, res) => {
 
       // �🚀 AUTO-TRANSFER TO NGO VIA WEBHOOK
       try {
-        console.log(`🔄 Webhook: Starting auto-transfer for donation: ${updatedDonation._id}`);
         await transferToNGO(updatedDonation._id);
-        console.log(`✅ Webhook: Auto-transfer completed successfully`);
       } catch (transferError) {
         console.error('⚠️ Webhook: Auto-transfer to NGO failed:', transferError.message);
         // Log the error but don't fail the webhook response
@@ -524,9 +543,6 @@ export const getDonationDetails = async (req, res) => {
 // Get donor's donation history
 export const getDonorHistory = async (req, res) => {
   try {
-    console.log("=== getDonorHistory called ===");
-    console.log("User:", req.user?._id);
-    
     if (!req.user) {
       return res.status(401).json({ error: "User not authenticated" });
     }
@@ -536,8 +552,6 @@ export const getDonorHistory = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    console.log("Fetching donations for user:", userId);
-
     const donations = await Donation.find({ 
       donor_id: userId 
     })
@@ -546,22 +560,12 @@ export const getDonorHistory = async (req, res) => {
     .skip(skip)
     .limit(limit);
 
-    console.log("Found donations:", donations.length);
-    console.log("Sample donation statuses:", donations.slice(0, 3).map(d => ({
-      id: d._id,
-      status: d.payment_status,
-      amount: d.amount,
-      paid_at: d.paid_at
-    })));
-
     const totalDonations = await Donation.countDocuments({ 
       donor_id: userId 
     });
 
-    // Get donor statistics with enhanced debugging
-    console.log("Calling getDonorStats with userId:", userId);
+    // Get donor statistics
     const stats = await Donation.getDonorStats(userId);
-    console.log("Stats aggregation result:", JSON.stringify(stats, null, 2));
 
     return res.json({
       success: true,
@@ -831,7 +835,7 @@ export const refreshCampaignStats = async (req, res) => {
       { new: true }
     );
 
-    console.log(`📊 Campaign stats refreshed: ₹${stats.total_amount} raised, ${stats.total_donors} donors, ${progressPercentage}% progress`);
+    console.log(`📊 Campaign stats refreshed: ₹${stats.total_amount}, ${stats.total_donors} donors`);
 
     return res.json({
       success: true,
@@ -870,8 +874,8 @@ function getStatusMessage(status) {
 }
 
 // Verify webhook signature (implement based on Cashfree docs)
-function verifyWebhookSignature(payload, signature) {
-  // Implement webhook signature verification
-  // This is a placeholder - implement according to Cashfree documentation
-  return true;
-}
+// function verifyWebhookSignature(payload, signature) {
+//   // Implement webhook signature verification
+//   // This is a placeholder - implement according to Cashfree documentation
+//   return true;
+// }

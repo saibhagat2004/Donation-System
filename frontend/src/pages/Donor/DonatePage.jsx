@@ -154,7 +154,24 @@ export default function DonatePage() {
       throw new Error('Failed to create payment order');
     } catch (error) {
       console.error('Create order error:', error);
-      throw error;
+      
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        const errorMessage = error.response?.data?.error;
+        if (errorMessage?.includes('ended') || errorMessage?.includes('expired')) {
+          throw new Error('🕐 This campaign has ended. Donations are no longer accepted.');
+        } else if (errorMessage?.includes('beneficiary')) {
+          throw new Error('⚠️ Campaign setup incomplete. Please contact the organizer.');
+        } else if (errorMessage?.includes('minimum')) {
+          throw new Error('💰 Minimum donation amount is ₹1.');
+        } else {
+          throw new Error(errorMessage || 'Unable to process donation. Please check campaign details.');
+        }
+      } else if (error.response?.status === 404) {
+        throw new Error('❌ Campaign not found. It may have been removed.');
+      } else {
+        throw new Error(error.response?.data?.error || 'Failed to create payment order');
+      }
     }
   };
 
@@ -172,7 +189,7 @@ export default function DonatePage() {
         if (status === "PAID") {
           toast.success("🎉 Donation successful! Thank you for your contribution.");
           // Redirect to success page
-          navigate(`/donation-success/${orderId}`);
+          navigate(`/donation-receipt/${orderId}`);
         } else if (status === "PENDING") {
           toast.loading("Payment is being processed...");
           // Check again after a delay
@@ -221,7 +238,10 @@ export default function DonatePage() {
 
     } catch (error) {
       console.error('Donation process error:', error);
-      toast.error(error.response?.data?.message || 'Failed to process donation');
+      
+      // Show specific error message
+      const errorMessage = error.message || error.response?.data?.error || 'Failed to process donation';
+      toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -359,8 +379,17 @@ export default function DonatePage() {
                 <p className="text-sm text-gray-500">Donors</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">{daysLeft}</p>
-                <p className="text-sm text-gray-500">Days Left</p>
+                {daysLeft > 0 ? (
+                  <>
+                    <p className="text-2xl font-bold text-orange-600">{daysLeft}</p>
+                    <p className="text-sm text-gray-500">Days Left</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold text-red-600">Ended</p>
+                    <p className="text-sm text-gray-500">Campaign Closed</p>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -369,6 +398,24 @@ export default function DonatePage() {
         {/* Donation Form */}
         <div className="bg-white rounded-xl shadow-sm border p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Donation Details</h2>
+          
+          {/* Campaign Ended Warning */}
+          {daysLeft <= 0 && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <h3 className="text-sm font-medium text-red-800">Campaign Has Ended</h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    This campaign ended on {new Date(campaign.end_date).toLocaleDateString('en-IN')}. 
+                    Donations are no longer being accepted.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="space-y-6">
             {/* Donation Amount */}
@@ -524,14 +571,16 @@ export default function DonatePage() {
             {/* Donate Button */}
             <button
               onClick={handleDonate}
-              disabled={isProcessing || !donationData.amount}
+              disabled={isProcessing || !donationData.amount || daysLeft <= 0}
               className={`w-full py-4 rounded-lg font-semibold text-lg transition ${
-                isProcessing || !donationData.amount
+                isProcessing || !donationData.amount || daysLeft <= 0
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
-              {isProcessing ? (
+              {daysLeft <= 0 ? (
+                'Campaign Has Ended'
+              ) : isProcessing ? (
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                   Processing...

@@ -376,7 +376,7 @@ export default function Campaigns() {
                       View Details
                     </button>
                     <button 
-                      onClick={() => navigate(`/campaign/${campaign._id}/edit`)}
+                      // onClick={() => navigate(`/campaign/${campaign._id}/edit`)}
                       className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
                     >
                       Edit

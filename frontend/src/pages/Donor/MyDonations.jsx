@@ -118,7 +118,7 @@ export default function MyDonations() {
   };
 
   const handleViewReceipt = (orderId) => {
-    navigate(`/donation-success/${orderId}`);
+    navigate(`/donation-receipt/${orderId}`);
   };
 
   if (isLoading) {

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-export default function DonationSuccessPage() {
+export default function DonationReceiptPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
   
