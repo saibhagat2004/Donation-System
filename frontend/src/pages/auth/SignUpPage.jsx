@@ -155,8 +155,8 @@ const SignUpPage = () => {
               required
             >
               <option value="" disabled>Select Role</option>
-              <option value="Donor">Donor</option>
-              <option value="NGO">NGO</option>
+              <option value="donor">Donor</option>
+              <option value="ngo">NGO</option>
             </select>
             <button 
               type="submit" 

@@ -100,6 +100,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
   const authUser = queryClient.getQueryData(["authUser"]);
 
   const role = authUser?.role || "donor";
+  console.log(role)
   const items = menuItems[role] || [];
 
   return (
