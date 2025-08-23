@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { load } from '@cashfreepayments/cashfree-js';
+import { useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
 export default function DonatePage() {
   const { campaignId } = useParams();
   const navigate = useNavigate();
+  
+  // Get current user data from existing query cache
+  const queryClient = useQueryClient();
+  const authUser = queryClient.getQueryData(["authUser"]);
   
   const [campaign, setCampaign] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,10 +26,21 @@ export default function DonatePage() {
     anonymous: false,
     showAmount: true,
     donorMessage: '',
-    donorName: '',
-    donorEmail: '',
+    donorName: authUser?.fullName || '',
+    donorEmail: authUser?.email || '',
     donorPhone: ''
   });
+
+  // Auto-fill user data when authUser loads
+  useEffect(() => {
+    if (authUser) {
+      setDonationData(prev => ({
+        ...prev,
+        donorName: authUser.fullName || '',
+        donorEmail: authUser.email || ''
+      }));
+    }
+  }, [authUser]);
 
   // Predefined amounts
   const quickAmounts = [100, 500, 1000, 2500, 5000, 10000];
@@ -509,6 +525,17 @@ export default function DonatePage() {
           )}
           
           <div className="space-y-6">
+            {/* Information Notice */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-blue-900 mb-2">📋 Why we collect this information:</h4>
+              <ul className="text-xs text-blue-700 space-y-1">
+                <li>• <strong>Tax Receipt:</strong> Required for 80G tax deduction receipt</li>
+                <li>• <strong>Payment Security:</strong> Cashfree payment gateway requirement</li>
+                <li>• <strong>Communication:</strong> Send donation receipt and campaign updates</li>
+                <li>• <strong>Support:</strong> Contact you if any payment issues arise</li>
+              </ul>
+            </div>
+
             {/* Donation Amount */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -546,7 +573,12 @@ export default function DonatePage() {
 
             {/* Donor Information */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Your Information</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Your Information</h3>
+                {authUser && (
+                  <span className="text-sm text-green-600 font-medium">✓ Auto-filled from profile</span>
+                )}
+              </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -556,9 +588,14 @@ export default function DonatePage() {
                   type="text"
                   value={donationData.donorName}
                   onChange={(e) => handleInputChange('donorName', e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 ${
+                    authUser ? 'bg-green-50 border-green-200' : ''
+                  }`}
                   placeholder="Enter your full name"
                 />
+                {authUser && (
+                  <p className="text-xs text-green-600 mt-1">✓ Filled from your profile</p>
+                )}
               </div>
 
               <div>
@@ -569,14 +606,19 @@ export default function DonatePage() {
                   type="email"
                   value={donationData.donorEmail}
                   onChange={(e) => handleInputChange('donorEmail', e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 ${
+                    authUser ? 'bg-green-50 border-green-200' : ''
+                  }`}
                   placeholder="Enter your email"
                 />
+                {authUser && (
+                  <p className="text-xs text-green-600 mt-1">✓ Filled from your profile</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number *
+                  Phone Number * <span className="text-sm text-gray-500">(Required for payment gateway)</span>
                 </label>
                 <input
                   type="tel"
@@ -586,6 +628,7 @@ export default function DonatePage() {
                   placeholder="Enter 10-digit phone number"
                   maxLength="10"
                 />
+                <p className="text-xs text-gray-500 mt-1">📞 Required by payment gateway for transaction security</p>
               </div>
             </div>
 
@@ -620,20 +663,45 @@ export default function DonatePage() {
                 />
                 <span className="ml-2 text-sm text-gray-700">
                   Make this donation anonymous
+                  <span className="block text-xs text-gray-500 mt-1">
+                    Your name will be hidden, shown as "Anonymous Donor"
+                  </span>
                 </span>
               </label>
 
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={donationData.showAmount}
-                  onChange={(e) => handleInputChange('showAmount', e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">
-                  Show donation amount publicly
-                </span>
-              </label>
+              {!donationData.anonymous && (
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={donationData.showAmount}
+                    onChange={(e) => handleInputChange('showAmount', e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">
+                    Show donation amount publicly
+                    <span className="block text-xs text-gray-500 mt-1">
+                      Display "John Doe donated ₹5000" instead of "John Doe donated"
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              {donationData.anonymous && (
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={donationData.showAmount}
+                    onChange={(e) => handleInputChange('showAmount', e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">
+                    Show donation amount publicly
+                    <span className="block text-xs text-gray-500 mt-1">
+                      Display "Anonymous donated ₹5000" instead of "Anonymous donated"
+                    </span>
+                  </span>
+                </label>
+              )}
             </div>
 
             {/* Donation Summary */}
