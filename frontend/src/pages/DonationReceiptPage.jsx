@@ -297,7 +297,7 @@ export default function DonationReceiptPage() {
                 🎉 Your contribution makes a real difference! 
               </p>
               <p className="text-blue-600 text-sm mt-1">
-                You'll receive an <span className="font-semibold text-blue-700">email confirmation</span> shortly with your donation receipt.
+                You'll receive an email confirmation shortly with your donation receipt.
               </p>
             </div>
           )}
