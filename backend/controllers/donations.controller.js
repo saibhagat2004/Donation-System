@@ -89,13 +89,48 @@ export const transferToNGO = async (donationId) => {
     return response.data;
 
   } catch (error) {
-    console.error('❌ NGO transfer failed:', error.response?.data || error.message);
+    let errorMessage = error.message;
+    let failureReason = 'Transfer failed';
     
-    // Update settlement status to failed
+    // Handle specific Cashfree errors
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      
+      if (errorData.type === 'authentication_error' && errorData.code === 'unauthorized_ip') {
+        errorMessage = 'IP not whitelisted in Cashfree dashboard';
+        failureReason = 'Payout API: IP not whitelisted';
+        console.error('❌ NGO transfer failed: Server IP needs to be whitelisted in Cashfree Payout dashboard');
+        console.error('📋 Solution: Add server IP to whitelist in Cashfree Payout settings');
+      } else if (errorData.type === 'authentication_error') {
+        errorMessage = 'Payout API authentication failed';
+        failureReason = 'Invalid payout credentials';
+        console.error('❌ NGO transfer failed: Check Cashfree Payout API credentials');
+      } else {
+        errorMessage = errorData.message || 'Payout API error';
+        failureReason = errorData.message || 'Unknown payout error';
+      }
+      
+      console.error('❌ NGO transfer failed:', errorData);
+    } else {
+      console.error('❌ NGO transfer failed:', error.message);
+    }
+    
+    // Update settlement status to failed with specific reason
     await Donation.findByIdAndUpdate(donationId, {
       settlement_status: "FAILED",
-      failure_reason: error.response?.data?.message || error.message
+      failure_reason: failureReason,
+      settlement_notes: `Error: ${errorMessage}. Manual transfer required.`
     });
+    
+    // Don't throw error for authentication/IP issues - log and continue
+    if (error.response?.status === 403 || error.response?.data?.type === 'authentication_error') {
+      console.log('⚠️ Transfer marked as failed due to API configuration. Manual processing required.');
+      return { 
+        transfer_failed: true, 
+        reason: failureReason,
+        requires_manual_processing: true
+      };
+    }
     
     throw error;
   }
@@ -410,13 +445,24 @@ export const verifyDonationPayment = async (req, res) => {
         // Don't fail the payment verification
       }
 
-      // �🚀 AUTO-TRANSFER TO NGO IMMEDIATELY AFTER PAYMENT SUCCESS
-      try {
-        await transferToNGO(updatedDonation._id);
-      } catch (transferError) {
-        console.error('⚠️ Auto-transfer to NGO failed:', transferError.message);
-        // Don't fail the main payment verification, but log the error
-        // The transfer can be retried later
+      // 🚀 AUTO-TRANSFER TO NGO IMMEDIATELY AFTER PAYMENT SUCCESS
+      if (process.env.DISABLE_AUTO_TRANSFER !== 'true') {
+        try {
+          const transferResult = await transferToNGO(updatedDonation._id);
+          if (transferResult && transferResult.transfer_failed) {
+            console.log('⚠️ Auto-transfer failed but payment successful. Manual transfer required.');
+          }
+        } catch (transferError) {
+          console.error('⚠️ Auto-transfer to NGO failed:', transferError.message);
+          // Don't fail the main payment verification, but log the error
+          // The transfer can be retried later manually
+        }
+      } else {
+        console.log('⏸️ Auto-transfer disabled. Manual transfer required.');
+        await Donation.findByIdAndUpdate(updatedDonation._id, {
+          settlement_status: "PENDING",
+          settlement_notes: "Auto-transfer disabled. Manual processing required."
+        });
       }
 
       return res.json({
@@ -525,12 +571,23 @@ export const handleDonationWebhook = async (req, res) => {
         console.error('⚠️ Webhook: Failed to update campaign stats:', statsError.message);
       }
 
-      // �🚀 AUTO-TRANSFER TO NGO VIA WEBHOOK
-      try {
-        await transferToNGO(updatedDonation._id);
-      } catch (transferError) {
-        console.error('⚠️ Webhook: Auto-transfer to NGO failed:', transferError.message);
-        // Log the error but don't fail the webhook response
+      // 🚀 AUTO-TRANSFER TO NGO VIA WEBHOOK
+      if (process.env.DISABLE_AUTO_TRANSFER !== 'true') {
+        try {
+          const transferResult = await transferToNGO(updatedDonation._id);
+          if (transferResult && transferResult.transfer_failed) {
+            console.log('⚠️ Webhook: Auto-transfer failed but payment successful. Manual transfer required.');
+          }
+        } catch (transferError) {
+          console.error('⚠️ Webhook: Auto-transfer to NGO failed:', transferError.message);
+          // Log the error but don't fail the webhook response
+        }
+      } else {
+        console.log('⏸️ Webhook: Auto-transfer disabled. Manual transfer required.');
+        await Donation.findByIdAndUpdate(updatedDonation._id, {
+          settlement_status: "PENDING",
+          settlement_notes: "Auto-transfer disabled. Manual processing required."
+        });
       }
 
     } else if (webhookData.order_status === "FAILED") {

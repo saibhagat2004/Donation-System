@@ -109,6 +109,11 @@ const donationSchema = new mongoose.Schema(
       type: Number,
       min: 0
     },
+    settlement_notes: {
+      type: String,
+      trim: true,
+      maxLength: 500
+    },
     
     // Transaction Details
     payment_gateway_fee: {
