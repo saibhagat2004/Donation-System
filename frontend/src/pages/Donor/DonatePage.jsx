@@ -19,6 +19,8 @@ export default function DonatePage() {
   const [isPaymentSuccess, setIsPaymentSuccess] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState('verifying'); // 'verifying', 'success', 'failed'
   const [cashfree, setCashfree] = useState(null);
+  const [feeBreakdown, setFeeBreakdown] = useState(null);
+  const [isLoadingFees, setIsLoadingFees] = useState(false);
   
   // Donation form state
   const [donationData, setDonationData] = useState({
@@ -61,6 +63,33 @@ export default function DonatePage() {
 
     initializeCashfree();
   }, []);
+
+  // Fetch fee breakdown when amount changes
+  useEffect(() => {
+    if (donationData.amount && parseFloat(donationData.amount) >= 1) {
+      fetchFeeBreakdown(parseFloat(donationData.amount));
+    } else {
+      setFeeBreakdown(null);
+    }
+  }, [donationData.amount]);
+
+  const fetchFeeBreakdown = async (amount) => {
+    try {
+      setIsLoadingFees(true);
+      const response = await fetch(`/api/donations/fee-preview?amount=${amount}`, {
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setFeeBreakdown(data);
+      }
+    } catch (error) {
+      console.error('Error fetching fee breakdown:', error);
+    } finally {
+      setIsLoadingFees(false);
+    }
+  };
 
   // Fetch campaign details
   useEffect(() => {
@@ -704,35 +733,70 @@ export default function DonatePage() {
               )}
             </div>
 
-            {/* Donation Summary */}
-            {donationData.amount && (
+            {/* Donation Summary with Fee Breakdown */}
+            {donationData.amount && parseFloat(donationData.amount) >= 1 && (
               <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="font-medium text-gray-900 mb-2">Donation Summary</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span>Donation Amount:</span>
-                    <span className="font-medium">{formatCurrency(parseFloat(donationData.amount) || 0)}</span>
+                <h3 className="font-medium text-gray-900 mb-3">💳 Payment Breakdown</h3>
+                
+                {isLoadingFees ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-sm text-gray-600">Calculating fees...</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Payment Gateway Fee:</span>
-                    <span className="font-medium">Included</span>
-                  </div>
-                  <div className="border-t pt-1 mt-2">
-                    <div className="flex justify-between font-semibold">
-                      <span>Total Amount:</span>
-                      <span className="text-blue-600">{formatCurrency(parseFloat(donationData.amount) || 0)}</span>
+                ) : feeBreakdown ? (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">💖 Donation to NGO:</span>
+                      <span className="font-medium text-green-600">{formatCurrency(feeBreakdown.donation_amount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">🏢 Platform Fee:</span>
+                      <span className="font-medium text-orange-600">+{formatCurrency(feeBreakdown.fees.platform_fee)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">💳 Payment Gateway Fee (1.5%):</span>
+                      <span className="font-medium text-orange-600">+{formatCurrency(feeBreakdown.fees.gateway_fee)}</span>
+                    </div>
+                    <div className="border-t pt-2 mt-3">
+                      <div className="flex justify-between font-semibold text-lg">
+                        <span className="text-gray-900">💰 You Pay:</span>
+                        <span className="text-blue-600">{formatCurrency(feeBreakdown.total_amount)}</span>
+                      </div>
+                    </div>
+                    
+                    {/* Fee Explanation */}
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                      <p className="text-xs text-blue-700 mb-2">
+                        <strong>ℹ️ Why do we charge fees?</strong>
+                      </p>
+                      <ul className="text-xs text-blue-600 space-y-1">
+                        <li>• <strong>Platform Fee (₹15):</strong> Covers platform maintenance, security, and support</li>
+                        <li>• <strong>Gateway Fee (1.5%):</strong> Charged by payment provider for secure transactions</li>
+                        <li>• <strong>100% of your donation</strong> reaches the NGO - no deductions!</li>
+                      </ul>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Donation Amount:</span>
+                      <span className="font-medium">{formatCurrency(parseFloat(donationData.amount) || 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Fees:</span>
+                      <span className="font-medium">Calculating...</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Donate Button */}
             <button
               onClick={handleDonate}
-              disabled={isProcessing || !donationData.amount || daysLeft <= 0}
+              disabled={isProcessing || !donationData.amount || daysLeft <= 0 || isLoadingFees}
               className={`w-full py-4 rounded-lg font-semibold text-lg transition ${
-                isProcessing || !donationData.amount || daysLeft <= 0
+                isProcessing || !donationData.amount || daysLeft <= 0 || isLoadingFees
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
@@ -744,6 +808,10 @@ export default function DonatePage() {
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                   Processing...
                 </div>
+              ) : isLoadingFees ? (
+                'Calculating Fees...'
+              ) : feeBreakdown ? (
+                `💳 Pay ${formatCurrency(feeBreakdown.total_amount)} (₹${donationData.amount} donation + fees)`
               ) : (
                 `Donate ${donationData.amount ? formatCurrency(parseFloat(donationData.amount)) : '₹0'}`
               )}

@@ -147,19 +147,77 @@ export const updateCampaignStats = async (donation) => {
   }
 };
 
-// Calculate platform and gateway fees
-function calculateFees(amount) {
+// Calculate platform and gateway fees - NEW APPROACH: Add fees to donation amount
+function calculateFees(donationAmount) {
   const platformFee = 15; // Fixed ₹15 platform fee
   const gatewayFeePercentage = 1.50; // Cashfree's fee 1.50%
   
-  const gatewayFee = Math.round((amount * gatewayFeePercentage) / 100);
+  const gatewayFee = Math.round((donationAmount * gatewayFeePercentage) / 100);
+  const totalAmount = donationAmount + platformFee + gatewayFee; // Total amount donor pays
   
   return {
+    donationAmount, // Original donation amount (goes to NGO)
     platformFee,
     gatewayFee,
-    netAmount: amount - platformFee - gatewayFee
+    totalAmount, // Total amount charged to donor
+    netAmount: donationAmount // Net amount to NGO (same as donation amount)
   };
 }
+
+// Calculate fees for fee preview (before adding fees)
+function calculateFeePreview(donationAmount) {
+  const platformFee = 15; // Fixed ₹15 platform fee
+  const gatewayFeePercentage = 1.50; // Cashfree's fee 1.50%
+  
+  const gatewayFee = Math.round((donationAmount * gatewayFeePercentage) / 100);
+  const totalAmount = donationAmount + platformFee + gatewayFee;
+  
+  return {
+    donationAmount,
+    platformFee,
+    gatewayFee,
+    totalAmount
+  };
+}
+
+// Get fee calculation preview for frontend
+export const getFeePreview = async (req, res) => {
+  try {
+    const { amount } = req.query;
+    
+    if (!amount || parseFloat(amount) < 1) {
+      return res.status(400).json({ 
+        error: "Amount must be at least ₹1" 
+      });
+    }
+
+    const donationAmount = parseFloat(amount);
+    const feeBreakdown = calculateFeePreview(donationAmount);
+
+    return res.json({
+      success: true,
+      donation_amount: feeBreakdown.donationAmount,
+      fees: {
+        platform_fee: feeBreakdown.platformFee,
+        gateway_fee: feeBreakdown.gatewayFee,
+        total_fees: feeBreakdown.platformFee + feeBreakdown.gatewayFee
+      },
+      total_amount: feeBreakdown.totalAmount,
+      breakdown: {
+        donation_to_ngo: feeBreakdown.donationAmount,
+        platform_fee: feeBreakdown.platformFee,
+        gateway_fee: feeBreakdown.gatewayFee,
+        you_pay: feeBreakdown.totalAmount
+      }
+    });
+
+  } catch (error) {
+    console.error("Fee preview error:", error);
+    return res.status(500).json({ 
+      error: "Failed to calculate fees" 
+    });
+  }
+};
 
 // Create donation order
 export const createDonationOrder = async (req, res) => {
@@ -208,15 +266,15 @@ export const createDonationOrder = async (req, res) => {
       });
     }
 
-    // Calculate fees
-    const { platformFee, gatewayFee, netAmount } = calculateFees(amount);
+    // Calculate fees - NEW: Add fees to donation amount
+    const { donationAmount, platformFee, gatewayFee, totalAmount, netAmount } = calculateFees(amount);
 
     // Generate order ID
     const orderLd = generateDonationOrderId();
 
-    // Create Cashfree order request
+    // Create Cashfree order request - charge totalAmount to donor
     const cashfreeRequest = {
-      order_amount: amount,
+      order_amount: totalAmount, // Total amount including fees
       order_currency: "INR",
       order_id: orderLd,
       customer_details: {
@@ -231,7 +289,7 @@ export const createDonationOrder = async (req, res) => {
         campaign_id: campaignId,
         donor_id: userId.toString()
       },
-      order_note: `Donation for ${campaign.title}`
+      order_note: `Donation for ${campaign.title} (₹${amount} + fees)`
     };
 
     // Create order in Cashfree
@@ -243,7 +301,8 @@ export const createDonationOrder = async (req, res) => {
 
     // Create donation record in database
     const donation = new Donation({
-      amount: amount,
+      amount: donationAmount, // Original donation amount (goes to NGO)
+      total_amount: totalAmount, // Total amount charged to donor
       donor_id: userId,
       campaign_id: campaignId,
       ngo_id: ngo._id,
@@ -252,7 +311,7 @@ export const createDonationOrder = async (req, res) => {
       beneficiary_id: ngo.ngoDetails.beneficiary_id,
       payment_gateway_fee: gatewayFee,
       platform_fee: platformFee,
-      net_amount: netAmount,
+      net_amount: netAmount, // Amount that goes to NGO (same as donation amount)
       anonymous: preferences?.anonymous || false,
       show_amount: preferences?.showAmount !== false,
       donor_message: preferences?.donorMessage || "",
@@ -269,16 +328,23 @@ export const createDonationOrder = async (req, res) => {
       success: true,
       order_id: orderLd,
       payment_session_id: cashfreeResponse.data.payment_session_id,
-      amount: amount,
+      donation_amount: donationAmount,
+      total_amount: totalAmount,
       currency: "INR",
       fees: {
         platform_fee: platformFee,
         gateway_fee: gatewayFee,
-        net_amount: netAmount
+        total_fees: platformFee + gatewayFee
+      },
+      breakdown: {
+        donation_to_ngo: donationAmount,
+        platform_fee: platformFee,
+        gateway_fee: gatewayFee,
+        you_pay: totalAmount
       }
     };
 
-    console.log(`💰 Donation order created: ${orderLd} - ₹${amount} for ${campaign.title}`);
+    console.log(`💰 Donation order created: ${orderLd} - ₹${donationAmount} donation + ₹${platformFee + gatewayFee} fees = ₹${totalAmount} total for ${campaign.title}`);
     return res.json(response);
 
   } catch (error) {
@@ -357,9 +423,10 @@ export const verifyDonationPayment = async (req, res) => {
         success: true,
         payment_status: "PAID",
         order_id: orderId,
-        amount: donation.amount,
-        net_amount: donation.net_amount,
-        campaign_title: donation.campaign_id.title,
+        amount: updatedDonation.amount,
+        total_amount: updatedDonation.total_amount || (updatedDonation.amount + updatedDonation.platform_fee + updatedDonation.payment_gateway_fee),
+        net_amount: updatedDonation.net_amount,
+        campaign_title: updatedDonation.campaign_id.title,
         message: "Payment successful! Funds are being transferred to the NGO."
       });
 
@@ -510,7 +577,8 @@ export const getDonationDetails = async (req, res) => {
       success: true,
       donation: {
         order_id: donation.cashfree_order_id,
-        amount: donation.amount,
+        amount: donation.amount, // Donation amount (goes to NGO)
+        total_amount: donation.total_amount || (donation.amount + donation.platform_fee + donation.payment_gateway_fee), // Total paid by donor
         status: donation.payment_status,
         campaign: {
           id: donation.campaign_id._id,
@@ -527,7 +595,8 @@ export const getDonationDetails = async (req, res) => {
         fees: {
           platform_fee: donation.platform_fee,
           gateway_fee: donation.payment_gateway_fee,
-          net_amount: donation.net_amount
+          net_amount: donation.net_amount,
+          total_fees: donation.platform_fee + donation.payment_gateway_fee
         }
       }
     });

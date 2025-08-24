@@ -42,10 +42,32 @@ export default function DonationReceiptPage() {
     }).format(amount);
   };
 
-  const downloadReceipt = () => {
+  const downloadReceipt = async () => {
     if (donation?.receipt_number) {
-      // Implement receipt download functionality
-      toast.success('Receipt download feature coming soon!');
+      try {
+        const response = await fetch(`/api/receipts/download/${donation.order_id}`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `donation-receipt-${donation.order_id}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          toast.success('Receipt downloaded successfully!');
+        } else {
+          throw new Error('Failed to download receipt');
+        }
+      } catch (error) {
+        console.error('Error downloading receipt:', error);
+        toast.error('Failed to download receipt. Please try again.');
+      }
     }
   };
 
@@ -117,8 +139,13 @@ export default function DonationReceiptPage() {
             <div className="border-b pb-4">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Donation Amount</h3>
-                  <p className="text-3xl font-bold text-green-600">{formatCurrency(donation.amount)}</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Total Amount Paid</h3>
+                  <p className="text-3xl font-bold text-blue-600">{formatCurrency(donation.total_amount || donation.amount)}</p>
+                  {donation.total_amount && donation.total_amount !== donation.amount && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      Includes ₹{donation.amount} donation + fees
+                    </p>
+                  )}
                 </div>
                 {donation.receipt_number && (
                   <div className="text-right">
@@ -168,41 +195,51 @@ export default function DonationReceiptPage() {
                   </span>
                 </div>
                 <div>
+                  <p className="text-gray-500">Total Paid</p>
+                  <p className="font-medium text-gray-900">{formatCurrency(donation.total_amount || donation.amount)}</p>
+                </div>
+                {donation.fees && donation.total_amount && (
+                  <div>
+                    <p className="text-gray-500">Donation to NGO</p>
+                    <p className="font-medium text-green-600">{formatCurrency(donation.amount)}</p>
+                  </div>
+                )}
+                <div>
                   <p className="text-gray-500">Date & Time</p>
                   <p className="font-medium text-gray-900">
                     {new Date(donation.paid_at || donation.created_at).toLocaleString('en-IN')}
                   </p>
                 </div>
-                {donation.fees && (
-                  <div>
-                    <p className="text-gray-500">Net Amount to NGO</p>
-                    <p className="font-medium text-gray-900">{formatCurrency(donation.fees.net_amount)}</p>
-                  </div>
-                )}
               </div>
             </div>
 
-            {/* Fee Breakdown */}
+            {/* Payment Breakdown */}
             {donation.fees && isSuccessful && (
               <div className="border-b pb-4">
-                <h4 className="text-md font-medium text-gray-900 mb-3">Fee Breakdown</h4>
+                <h4 className="text-md font-medium text-gray-900 mb-3">💳 Payment Breakdown</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Donation Amount:</span>
-                    <span className="font-medium">{formatCurrency(donation.amount)}</span>
+                    <span className="text-gray-600">💖 Donation to NGO:</span>
+                    <span className="font-medium text-green-600">{formatCurrency(donation.amount)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Platform Fee:</span>
-                    <span className="font-medium">-{formatCurrency(donation.fees.platform_fee)}</span>
+                    <span className="text-gray-600">🏢 Platform Fee:</span>
+                    <span className="font-medium text-orange-600">{formatCurrency(donation.fees.platform_fee)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Gateway Fee:</span>
-                    <span className="font-medium">-{formatCurrency(donation.fees.gateway_fee)}</span>
+                    <span className="text-gray-600">💳 Payment Gateway Fee:</span>
+                    <span className="font-medium text-orange-600">{formatCurrency(donation.fees.gateway_fee)}</span>
                   </div>
-                  <div className="border-t pt-2 flex justify-between font-semibold">
-                    <span>Amount to NGO:</span>
-                    <span className="text-green-600">{formatCurrency(donation.fees.net_amount)}</span>
+                  <div className="border-t pt-2 mt-2 flex justify-between font-semibold">
+                    <span>💰 Total You Paid:</span>
+                    <span className="text-blue-600">{formatCurrency(donation.total_amount || (donation.amount + donation.fees.platform_fee + donation.fees.gateway_fee))}</span>
                   </div>
+                </div>
+                <div className="mt-3 p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-700">
+                    ✅ <strong>100% of your {formatCurrency(donation.amount)} donation</strong> went directly to the NGO. 
+                    Platform and gateway fees are charged separately to ensure full transparency.
+                  </p>
                 </div>
               </div>
             )}
@@ -260,7 +297,7 @@ export default function DonationReceiptPage() {
                 🎉 Your contribution makes a real difference! 
               </p>
               <p className="text-blue-600 text-sm mt-1">
-                You'll receive an email confirmation shortly with your donation receipt.
+                You'll receive an <span className="font-semibold text-blue-700">email confirmation</span> shortly with your donation receipt.
               </p>
             </div>
           )}

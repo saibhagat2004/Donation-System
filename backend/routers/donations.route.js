@@ -9,10 +9,14 @@ import {
   getCampaignDonations,
   manualTransferToNGO,
   getSettlementStatus,
-  refreshCampaignStats
+  refreshCampaignStats,
+  getFeePreview
 } from "../controllers/donations.controller.js";
 
 const router = express.Router();
+
+// Get fee preview (no authentication required for transparency)
+router.get("/fee-preview", getFeePreview);
 
 // Create donation order (requires authentication)
 router.post("/create-order", protectRoute, createDonationOrder);

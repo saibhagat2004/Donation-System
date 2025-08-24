@@ -1,19 +1,17 @@
- //server.js
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import bodyParser from 'body-parser';
 import cors from "cors";
-// import {v2 as cloudinary} from "cloudinary"
 import connectMongoDB  from "./db/connectMongoDB.js";
 import cookieParser from "cookie-parser";
-
 import authRoutes from "./routers/auth.route.js"
 import userRouter from "./routers/user.route.js"
 import cashfreepgRouter from "./routers/cashfreepg.route.js"
 import campaignRouter from "./routers/campaign.route.js"
 import ngoRouter from "./routers/ngo.route.js"
 import donationsRouter from "./routers/donations.route.js"
+import receiptRouter from "./routers/receipt.route.js"
 import testRouter from "./routers/test.route.js"
 
 dotenv.config(); //use to read .env content
@@ -58,6 +56,7 @@ app.use("/api/cashfreepg",cashfreepgRouter);
 app.use("/api/campaigns",campaignRouter);
 app.use("/api/ngo",ngoRouter);
 app.use("/api/donations",donationsRouter);
+app.use("/api/receipts",receiptRouter);
 app.use("/api/test",testRouter);
 
 // Health check endpoint for Render

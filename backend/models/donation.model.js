@@ -14,6 +14,17 @@ const donationSchema = new mongoose.Schema(
         message: "Amount can have maximum 2 decimal places"
       }
     },
+    total_amount: {
+      type: Number,
+      required: true,
+      min: 1,
+      validate: {
+        validator: function(value) {
+          return Number.isInteger(value * 100); // Ensure max 2 decimal places
+        },
+        message: "Total amount can have maximum 2 decimal places"
+      }
+    },
     currency: {
       type: String,
       default: "INR",
@@ -233,9 +244,10 @@ donationSchema.virtual('processing_time').get(function() {
 
 // Pre-save middleware
 donationSchema.pre('save', function(next) {
-  // Calculate net amount after fees
-  if (this.amount && this.payment_gateway_fee !== undefined && this.platform_fee !== undefined) {
-    this.net_amount = this.amount - this.payment_gateway_fee - this.platform_fee;
+  // In the new model: amount = donation to NGO, total_amount = what donor pays
+  // net_amount should equal amount (donation to NGO)
+  if (this.amount && !this.net_amount) {
+    this.net_amount = this.amount; // Net amount to NGO equals donation amount
   }
   
   // Generate receipt number for successful payments
