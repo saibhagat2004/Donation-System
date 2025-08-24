@@ -9,6 +9,24 @@ export default function CampaignDetails() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Helper function to fix image URLs
+  const getImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    
+    // If it's already a full URL (Cloudinary), return as is
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return imageUrl;
+    }
+    
+    // If it's a local path, ensure it starts with a forward slash and normalize separators
+    let normalizedPath = imageUrl.replace(/\\/g, '/'); // Replace backslashes with forward slashes
+    if (!normalizedPath.startsWith('/')) {
+      normalizedPath = '/' + normalizedPath;
+    }
+    
+    return normalizedPath;
+  };
+
   // Helper function to safely parse tags
   const parseTags = (tags) => {
     if (!tags || typeof tags !== 'string' || !tags.trim()) {
@@ -34,6 +52,9 @@ export default function CampaignDetails() {
 
       const data = await response.json();
       setCampaign(data);
+      console.log("Campaign data loaded:", data);
+      console.log("Logo URL:", data.logo);
+      console.log("Activity photos:", data.activity_photos);
     } catch (err) {
       console.error("Fetch campaign details error:", err);
       toast.error("Failed to load campaign details");
@@ -136,16 +157,31 @@ export default function CampaignDetails() {
             </div>
 
             {/* Campaign Image */}
-            {campaign.logo && (
+            {campaign.logo ? (
               <div className="mb-6">
                 <img 
-                  src={campaign.logo} 
+                  src={getImageUrl(campaign.logo)} 
                   alt={campaign.title}
                   className="w-full h-64 object-cover rounded-lg"
                   onError={(e) => {
+                    console.error("Logo failed to load:", campaign.logo, "-> Processed URL:", getImageUrl(campaign.logo));
                     e.target.style.display = 'none';
                   }}
+                  onLoad={() => {
+                    console.log("Logo loaded successfully:", campaign.logo, "-> Processed URL:", getImageUrl(campaign.logo));
+                  }}
                 />
+              </div>
+            ) : (
+              <div className="mb-6">
+                <div className="w-full h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <div className="text-center text-gray-500">
+                    <svg className="w-16 h-16 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>No campaign image</p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -192,15 +228,20 @@ export default function CampaignDetails() {
                     <h3 className="text-lg font-semibold text-gray-900 mb-3">Activity Photos</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {campaign.activity_photos.map((photo, index) => (
-                        <img
-                          key={index}
-                          src={photo}
-                          alt={`Activity ${index + 1}`}
-                          className="w-full h-48 object-cover rounded-lg"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
+                        <div key={index} className="relative">
+                          <img
+                            src={getImageUrl(photo)}
+                            alt={`Activity ${index + 1}`}
+                            className="w-full h-48 object-cover rounded-lg"
+                            onError={(e) => {
+                              console.error(`Activity photo ${index + 1} failed to load:`, photo, "-> Processed URL:", getImageUrl(photo));
+                              e.target.parentElement.style.display = 'none';
+                            }}
+                            onLoad={() => {
+                              console.log(`Activity photo ${index + 1} loaded successfully:`, photo, "-> Processed URL:", getImageUrl(photo));
+                            }}
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
