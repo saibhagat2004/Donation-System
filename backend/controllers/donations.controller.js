@@ -621,13 +621,21 @@ export const getDonorHistory = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    console.log(`📋 Fetching donation history for user: ${userId}, page: ${page}`);
+
     const donations = await Donation.find({ 
       donor_id: userId 
     })
-    .populate('campaign_id', 'title category logo current_amount goal_amount')
+    .populate({
+      path: 'campaign_id', 
+      select: 'title category logo current_amount goal_amount',
+      options: { strictPopulate: false } // Don't fail if campaign is missing
+    })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
+
+    console.log(`📋 Found ${donations.length} donations for user: ${userId}`);
 
     const totalDonations = await Donation.countDocuments({ 
       donor_id: userId 
@@ -636,21 +644,45 @@ export const getDonorHistory = async (req, res) => {
     // Get donor statistics
     const stats = await Donation.getDonorStats(userId);
 
+    // Filter and map donations safely
+    const safeDonations = donations
+      .filter(donation => donation && donation.cashfree_order_id) // Filter out any null donations
+      .map(donation => {
+        try {
+          return {
+            order_id: donation.cashfree_order_id,
+            amount: donation.amount,
+            total_amount: donation.total_amount || (donation.amount + (donation.platform_fee || 0) + (donation.payment_gateway_fee || 0)),
+            status: donation.payment_status,
+            campaign: donation.campaign_id ? {
+              id: donation.campaign_id._id,
+              title: donation.campaign_id.title,
+              category: donation.campaign_id.category,
+              logo: donation.campaign_id.logo
+            } : {
+              id: null,
+              title: "Campaign Unavailable",
+              category: "Unknown",
+              logo: null
+            },
+            donated_at: donation.paid_at || donation.initiated_at,
+            receipt_number: donation.receipt_number,
+            fees: {
+              platform_fee: donation.platform_fee || 0,
+              gateway_fee: donation.payment_gateway_fee || 0,
+              total_fees: (donation.platform_fee || 0) + (donation.payment_gateway_fee || 0)
+            }
+          };
+        } catch (error) {
+          console.error('Error mapping donation:', donation._id, error);
+          return null;
+        }
+      })
+      .filter(donation => donation !== null); // Remove any failed mappings
+
     return res.json({
       success: true,
-      donations: donations.map(donation => ({
-        order_id: donation.cashfree_order_id,
-        amount: donation.amount,
-        status: donation.payment_status,
-        campaign: {
-          id: donation.campaign_id._id,
-          title: donation.campaign_id.title,
-          category: donation.campaign_id.category,
-          logo: donation.campaign_id.logo
-        },
-        donated_at: donation.paid_at || donation.initiated_at,
-        receipt_number: donation.receipt_number
-      })),
+      donations: safeDonations,
       pagination: {
         current_page: page,
         total_pages: Math.ceil(totalDonations / limit),
@@ -669,7 +701,7 @@ export const getDonorHistory = async (req, res) => {
     console.error("Get donor history error:", error);
     return res.status(500).json({ 
       error: "Failed to fetch donation history",
-      details: error.message
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -693,7 +725,11 @@ export const getCampaignDonations = async (req, res) => {
       campaign_id: campaignId,
       payment_status: "PAID"
     })
-    .populate('donor_id', 'fullName email')
+    .populate({
+      path: 'donor_id', 
+      select: 'fullName email',
+      options: { strictPopulate: false }
+    })
     .sort({ paid_at: -1 })
     .skip(skip)
     .limit(limit);
@@ -708,10 +744,14 @@ export const getCampaignDonations = async (req, res) => {
       donations: donations.map(donation => ({
         order_id: donation.cashfree_order_id,
         amount: donation.amount,
-        donor: donation.anonymous ? "Anonymous" : {
+        total_amount: donation.total_amount || (donation.amount + (donation.platform_fee || 0) + (donation.payment_gateway_fee || 0)),
+        donor: donation.anonymous ? "Anonymous" : (donation.donor_id ? {
           name: donation.donor_id.fullName,
           email: donation.donor_id.email
-        },
+        } : {
+          name: "Unknown Donor",
+          email: "N/A"
+        }),
         message: donation.donor_message,
         donated_at: donation.paid_at,
         receipt_number: donation.receipt_number,
