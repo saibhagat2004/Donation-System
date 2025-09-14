@@ -445,24 +445,60 @@ export const verifyDonationPayment = async (req, res) => {
         // Don't fail the payment verification
       }
 
-      // 🚀 AUTO-TRANSFER TO NGO IMMEDIATELY AFTER PAYMENT SUCCESS
-      if (process.env.DISABLE_AUTO_TRANSFER !== 'true') {
-        try {
-          const transferResult = await transferToNGO(updatedDonation._id);
-          if (transferResult && transferResult.transfer_failed) {
-            console.log('⚠️ Auto-transfer failed but payment successful. Manual transfer required.');
-          }
-        } catch (transferError) {
-          console.error('⚠️ Auto-transfer to NGO failed:', transferError.message);
-          // Don't fail the main payment verification, but log the error
-          // The transfer can be retried later manually
-        }
-      } else {
-        console.log('⏸️ Auto-transfer disabled. Manual transfer required.');
-        await Donation.findByIdAndUpdate(updatedDonation._id, {
-          settlement_status: "PENDING",
-          settlement_notes: "Auto-transfer disabled. Manual processing required."
+      // 🚀 SIMPLE JUGAD: ADD MONEY TO NGO BANK ACCOUNT VIA PYTHON API
+      try {
+        // Get NGO account number from ngo details
+        const ngo = await User.findById(updatedDonation.ngo_id);
+        const ngoAccountNumber = ngo.ngoDetails?.bank_account; // Fixed: use bank_account not bank_account_number
+        
+        console.log(`🔍 NGO Details Check:`, {
+          ngo_id: updatedDonation.ngo_id,
+          ngo_name: ngo.fullName,
+          has_ngoDetails: !!ngo.ngoDetails,
+          bank_account: ngo.ngoDetails?.bank_account,
+          org_name: ngo.ngoDetails?.org_name
         });
+        
+        if (ngoAccountNumber) {
+          // Call Python Banking API to add money
+          const bankingApiResponse = await axios.post('http://localhost:3001/api/add_money', {
+            account_number: parseInt(ngoAccountNumber),
+            amount: updatedDonation.amount // Send donation amount to NGO
+          }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000 // 10 second timeout
+          });
+
+          if (bankingApiResponse.data.success) {
+            console.log(`✅ Money added to NGO bank account: ₹${updatedDonation.amount} to account ${ngoAccountNumber}`);
+            
+            // Update settlement status
+            await Donation.findByIdAndUpdate(updatedDonation._id, {
+              settlement_status: "SETTLED",
+              settlement_notes: `Funds transferred to bank account ${ngoAccountNumber}`,
+              settled_at: new Date()
+            });
+          } else {
+            console.error('❌ Banking API failed:', bankingApiResponse.data.message);
+            await Donation.findByIdAndUpdate(updatedDonation._id, {
+              settlement_status: "FAILED",
+              settlement_notes: `Banking API error: ${bankingApiResponse.data.message}`
+            });
+          }
+        } else {
+          console.error('❌ NGO bank account number not found in ngoDetails.bank_account');
+          await Donation.findByIdAndUpdate(updatedDonation._id, {
+            settlement_status: "PENDING",
+            settlement_notes: "NGO bank account number not configured in ngoDetails.bank_account"
+          });
+        }
+      } catch (transferError) {
+        console.error('❌ Simple transfer to NGO bank failed:', transferError.message);
+        await Donation.findByIdAndUpdate(updatedDonation._id, {
+          settlement_status: "FAILED",
+          settlement_notes: `Transfer error: ${transferError.message}`
+        });
+        // Don't fail the payment verification
       }
 
       return res.json({
