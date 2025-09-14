@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Banking Simulation</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <h1>🏦 Banking Simulation</h1>
+        <p>Your trusted digital banking solution</p>
+      </header>
+
+      <!-- Welcome Screen -->
+      <div id="welcome-screen" class="screen active">
+        <div class="welcome-card">
+          <h2>Welcome to Our Banking System</h2>
+          <p>Please choose an option to get started</p>
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="showSignUp()">
+              <span class="btn-icon">👤</span>
+              Sign Up
+            </button>
+            <button class="btn btn-secondary" onclick="showSignIn()">
+              <span class="btn-icon">🔑</span>
+              Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sign Up Screen -->
+      <div id="signup-screen" class="screen">
+        <div class="form-card">
+          <h2>Create Your Account</h2>
+          <form id="signup-form" onsubmit="handleSignUp(event)">
+            <div class="form-group">
+              <label for="signup-username">Username</label>
+              <input type="text" id="signup-username" required />
+            </div>
+            <div class="form-group">
+              <label for="signup-password">Password</label>
+              <input type="password" id="signup-password" required />
+            </div>
+            <div class="form-group">
+              <label for="signup-name">Full Name</label>
+              <input type="text" id="signup-name" required />
+            </div>
+            <div class="form-group">
+              <label for="signup-age">Age</label>
+              <input type="number" id="signup-age" min="18" required />
+            </div>
+            <div class="form-group">
+              <label for="signup-city">City</label>
+              <input type="text" id="signup-city" required />
+            </div>
+            <div class="button-group">
+              <button type="submit" class="btn btn-primary">
+                Create Account
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline"
+                onclick="showWelcome()"
+              >
+                Back
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Sign In Screen -->
+      <div id="signin-screen" class="screen">
+        <div class="form-card">
+          <h2>Sign In to Your Account</h2>
+          <form id="signin-form" onsubmit="handleSignIn(event)">
+            <div class="form-group">
+              <label for="signin-username">Username</label>
+              <input type="text" id="signin-username" required />
+            </div>
+            <div class="form-group">
+              <label for="signin-password">Password</label>
+              <input type="password" id="signin-password" required />
+            </div>
+            <div class="button-group">
+              <button type="submit" class="btn btn-primary">Sign In</button>
+              <button
+                type="button"
+                class="btn btn-outline"
+                onclick="showWelcome()"
+              >
+                Back
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Dashboard Screen -->
+      <div id="dashboard-screen" class="screen">
+        <div class="dashboard">
+          <div class="dashboard-header">
+            <div class="user-info">
+              <h2>Welcome, <span id="username-display"></span>!</h2>
+              <p>Account Number: <span id="account-number-display"></span></p>
+            </div>
+            <button class="btn btn-outline btn-logout" onclick="logout()">
+              <span class="btn-icon">🚪</span>
+              Logout
+            </button>
+          </div>
+
+          <div class="services-grid">
+            <div class="service-card" onclick="showBalanceEnquiry()">
+              <div class="service-icon">💰</div>
+              <h3>Balance Enquiry</h3>
+              <p>Check your current balance</p>
+            </div>
+
+            <div class="service-card" onclick="showDeposit()">
+              <div class="service-icon">📈</div>
+              <h3>Cash Deposit</h3>
+              <p>Deposit money to your account</p>
+            </div>
+
+            <div class="service-card" onclick="showWithdraw()">
+              <div class="service-icon">📉</div>
+              <h3>Cash Withdraw</h3>
+              <p>Withdraw money from your account</p>
+            </div>
+
+            <div class="service-card" onclick="showFundTransfer()">
+              <div class="service-icon">💸</div>
+              <h3>Fund Transfer</h3>
+              <p>Transfer money to another account</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Balance Enquiry Screen -->
+      <div id="balance-screen" class="screen">
+        <div class="service-card-full">
+          <h2>Balance Enquiry</h2>
+          <div class="balance-display">
+            <div class="balance-amount">
+              <span class="currency">₹</span>
+              <span id="balance-amount">0</span>
+            </div>
+            <p>Available Balance</p>
+          </div>
+          <button class="btn btn-primary" onclick="showDashboard()">
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+
+      <!-- Deposit Screen -->
+      <div id="deposit-screen" class="screen">
+        <div class="service-card-full">
+          <h2>Cash Deposit</h2>
+          <form id="deposit-form" onsubmit="handleDeposit(event)">
+            <div class="form-group">
+              <label for="deposit-amount">Amount to Deposit</label>
+              <input
+                type="number"
+                id="deposit-amount"
+                min="1"
+                step="1"
+                required
+              />
+            </div>
+            <div class="button-group">
+              <button type="submit" class="btn btn-primary">Deposit</button>
+              <button
+                type="button"
+                class="btn btn-outline"
+                onclick="showDashboard()"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Withdraw Screen -->
+      <div id="withdraw-screen" class="screen">
+        <div class="service-card-full">
+          <h2>Cash Withdraw</h2>
+          <form id="withdraw-form" onsubmit="handleWithdraw(event)">
+            <div class="form-group">
+              <label for="withdraw-amount">Amount to Withdraw</label>
+              <input
+                type="number"
+                id="withdraw-amount"
+                min="1"
+                step="1"
+                required
+              />
+            </div>
+            <div class="button-group">
+              <button type="submit" class="btn btn-primary">Withdraw</button>
+              <button
+                type="button"
+                class="btn btn-outline"
+                onclick="showDashboard()"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Fund Transfer Screen -->
+      <div id="transfer-screen" class="screen">
+        <div class="service-card-full">
+          <h2>Fund Transfer</h2>
+          <form id="transfer-form" onsubmit="handleTransfer(event)">
+            <div class="form-group">
+              <label for="receiver-account">Receiver Account Number</label>
+              <input type="number" id="receiver-account" required />
+            </div>
+            <div class="form-group">
+              <label for="transfer-amount">Amount to Transfer</label>
+              <input
+                type="number"
+                id="transfer-amount"
+                min="1"
+                step="1"
+                required
+              />
+            </div>
+            <div class="button-group">
+              <button type="submit" class="btn btn-primary">Transfer</button>
+              <button
+                type="button"
+                class="btn btn-outline"
+                onclick="showDashboard()"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Success Message -->
+      <div id="success-message" class="message success hidden">
+        <span class="message-icon">✅</span>
+        <span id="success-text"></span>
+      </div>
+
+      <!-- Error Message -->
+      <div id="error-message" class="message error hidden">
+        <span class="message-icon">❌</span>
+        <span id="error-text"></span>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
