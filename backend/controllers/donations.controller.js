@@ -450,7 +450,8 @@ export const verifyDonationPayment = async (req, res) => {
             // Call Python Banking API to add money
             const bankingApiResponse = await axios.post('http://localhost:5050/api/add_money', {
               account_number: parseInt(ngoAccountNumber),
-              amount: updatedDonation.amount // Send donation amount to NGO
+              amount: updatedDonation.amount, // Send donation amount to NGO
+              donor_id: updatedDonation._id.toString() // Send donation MongoDB ObjectID as donor_id for tracking
             }, {
               headers: { 'Content-Type': 'application/json' },
               timeout: 10000 // 10 second timeout

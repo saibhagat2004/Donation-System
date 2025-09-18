@@ -10,6 +10,9 @@ cursor = mydb.cursor()
 def db_query(str):
     cursor.execute(str)
     result = cursor.fetchall()
+    # Commit changes for INSERT, UPDATE, and DELETE operations
+    if str.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP')):
+        mydb.commit()
     return result
 
 def createcustomertable():

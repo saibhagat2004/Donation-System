@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, render_template_string, send_from_dir
 from flask_cors import CORS
 import os
 import sqlite3
+import hashlib
 from customer import Customer
 from bank import Bank
 from register import SignUp, SignIn
@@ -79,20 +80,24 @@ def api_signup():
             cursor.execute("SELECT account_number FROM customers WHERE account_number = ?", (account_number,))
             if not cursor.fetchone():
                 break
+                
+        # Hash the password before storing it
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
         # Create customer
         cursor.execute("""
             INSERT INTO customers (username, password, name, age, city, balance, account_number, status)
             VALUES (?, ?, ?, ?, ?, 0, ?, 1)
-        """, (username, password, name, age, city, account_number))
+        """, (username, hashed_password, name, age, city, account_number))
         
         # Create transaction table for user
         cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {username}_transaction (
                 timedate VARCHAR(30),
                 account_number INTEGER,
-                remarks VARCHAR(30),
-                amount INTEGER
+                transaction_type VARCHAR(30),
+                amount INTEGER,
+                donor_id VARCHAR(64)
             )
         """)
         
@@ -127,7 +132,10 @@ def api_signin():
         if not user:
             return jsonify({'success': False, 'message': 'Username not found'}), 401
 
-        if user['password'] != password:
+        # Hash the provided password and compare with stored hash
+        hashed_input_password = hashlib.sha256(password.encode()).hexdigest()
+        
+        if user['password'] != hashed_input_password:
             return jsonify({'success': False, 'message': 'Wrong password'}), 401
 
         return jsonify({
@@ -179,6 +187,7 @@ def api_deposit():
         username = data.get('username')
         amount = int(data.get('amount'))
         account_number = data.get('account_number')
+        donor_id = data.get('donor_id')  # New parameter for donor_id
 
         if not all([username, amount, account_number]) or amount <= 0:
             return jsonify({'success': False, 'message': 'Invalid input data'}), 400
@@ -194,12 +203,20 @@ def api_deposit():
         new_balance = current_balance + amount
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_balance, username))
         
+        # Hash donor_id if provided
+        hashed_donor_id = None
+        if donor_id:
+            import hashlib
+            donor_id_str = str(donor_id)
+            hash_object = hashlib.sha256(donor_id_str.encode())
+            hashed_donor_id = hash_object.hexdigest()
+        
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
-            INSERT INTO {username}_transaction (timedate, account_number, remarks, amount)
-            VALUES (?, ?, 'Amount Deposit', ?)
-        """, (str(datetime.now()), account_number, amount))
+            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
+            VALUES (?, ?, 'Amount Deposit', ?, ?)
+        """, (str(datetime.now()), account_number, amount, hashed_donor_id))
         
         conn.commit()
         conn.close()
@@ -220,6 +237,7 @@ def api_withdraw():
         username = data.get('username')
         amount = int(data.get('amount'))
         account_number = data.get('account_number')
+        donor_id = data.get('donor_id')  # New parameter for donor_id
 
         if not all([username, amount, account_number]) or amount <= 0:
             return jsonify({'success': False, 'message': 'Invalid input data'}), 400
@@ -239,12 +257,20 @@ def api_withdraw():
         new_balance = current_balance - amount
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_balance, username))
         
+        # Hash donor_id if provided
+        hashed_donor_id = None
+        if donor_id:
+            import hashlib
+            donor_id_str = str(donor_id)
+            hash_object = hashlib.sha256(donor_id_str.encode())
+            hashed_donor_id = hash_object.hexdigest()
+            
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
-            INSERT INTO {username}_transaction (timedate, account_number, remarks, amount)
-            VALUES (?, ?, 'Amount Withdrawal', ?)
-        """, (str(datetime.now()), account_number, amount))
+            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
+            VALUES (?, ?, 'Amount Withdraw', ?, ?)
+        """, (str(datetime.now()), account_number, amount, hashed_donor_id))
         
         conn.commit()
         conn.close()
@@ -266,6 +292,7 @@ def api_transfer():
         receiver_account = int(data.get('receiver_account'))
         amount = int(data.get('amount'))
         sender_account = data.get('account_number')
+        donor_id = data.get('donor_id')  # New parameter for donor_id
 
         if not all([sender_username, receiver_account, amount, sender_account]) or amount <= 0:
             return jsonify({'success': False, 'message': 'Invalid input data'}), 400
@@ -307,21 +334,39 @@ def api_transfer():
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_sender_balance, sender_username))
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_receiver_balance, receiver_username))
         
+        # Process donor IDs for sender and receiver
+        sender_donor_id = None
+        receiver_donor_id = None
+        
+        # For sender's transaction, use the original donor_id if provided
+        if donor_id:
+            import hashlib
+            donor_id_str = str(donor_id)
+            hash_object = hashlib.sha256(donor_id_str.encode())
+            sender_donor_id = hash_object.hexdigest()
+        
+        # For receiver's transaction, hash the sender's account number as the donor
+        # This ensures the recipient knows who sent the money
+        import hashlib
+        sender_account_str = str(sender_account)
+        hash_object = hashlib.sha256(sender_account_str.encode())
+        receiver_donor_id = hash_object.hexdigest()
+            
         # Add transaction records
         from datetime import datetime
         current_time = str(datetime.now())
         
         # Sender transaction
         cursor.execute(f"""
-            INSERT INTO {sender_username}_transaction (timedate, account_number, remarks, amount)
-            VALUES (?, ?, 'Fund Transfer Out', ?)
-        """, (current_time, sender_account, amount))
+            INSERT INTO {sender_username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
+            VALUES (?, ?, 'Fund Transfer -> {receiver_account}', ?, ?)
+        """, (current_time, sender_account, amount, sender_donor_id))
         
         # Receiver transaction
         cursor.execute(f"""
-            INSERT INTO {receiver_username}_transaction (timedate, account_number, remarks, amount)
-            VALUES (?, ?, 'Fund Transfer In', ?)
-        """, (current_time, receiver_account, amount))
+            INSERT INTO {receiver_username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
+            VALUES (?, ?, 'Fund Transfer From {sender_account}', ?, ?)
+        """, (current_time, receiver_account, amount, receiver_donor_id))
         
         conn.commit()
         conn.close()
@@ -344,6 +389,7 @@ def api_add_money():
             
         account_number = data.get('account_number')
         amount = data.get('amount')
+        donor_id = data.get('donor_id')  # New parameter for donor_id
 
         if not account_number or not amount:
             return jsonify({'success': False, 'message': 'Account number and amount are required'}), 400
@@ -368,12 +414,20 @@ def api_add_money():
         new_balance = current_balance + amount
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_balance, username))
         
+        # Hash donor_id if provided
+        hashed_donor_id = None
+        if donor_id:
+            import hashlib
+            donor_id_str = str(donor_id)
+            hash_object = hashlib.sha256(donor_id_str.encode())
+            hashed_donor_id = hash_object.hexdigest()
+        
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
-            INSERT INTO {username}_transaction (timedate, account_number, remarks, amount)
-            VALUES (?, ?, 'Donation Received', ?)
-        """, (str(datetime.now()), account_number, amount))
+            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
+            VALUES (?, ?, 'Donation Received', ?, ?)
+        """, (str(datetime.now()), account_number, amount, hashed_donor_id))
         
         conn.commit()
         conn.close()
@@ -411,8 +465,9 @@ def api_transactions():
                 transaction_list.append({
                     'timedate': trans['timedate'],
                     'account_number': trans['account_number'],
-                    'remarks': trans['remarks'],
-                    'amount': trans['amount']
+                    'transaction_type': trans['transaction_type'],  # Updated from 'remarks'
+                    'amount': trans['amount'],
+                    'donor_id': trans['donor_id']  # Added donor_id to response
                 })
             
             conn.close()
@@ -427,7 +482,45 @@ def api_transactions():
                 'success': True,
                 'transactions': []
             })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/delete_user', methods=['POST'])
+def api_delete_user():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'message': 'No JSON data provided'}), 400
+            
+        username = data.get('username')
+        admin_password = data.get('admin_password')
+        confirmation = data.get('confirmation')
+
+        # Basic validation
+        if not all([username, admin_password, confirmation]):
+            return jsonify({'success': False, 'message': 'Username, admin password, and confirmation are required'}), 400
+            
+        # Simple admin password check - in production, use a more secure method
+        if admin_password != "admin123":  # Replace with actual admin password or better auth
+            return jsonify({'success': False, 'message': 'Invalid admin credentials'}), 401
+            
+        # Confirmation check
+        if confirmation.lower() != f"delete {username}":
+            return jsonify({'success': False, 'message': 'Confirmation text does not match "delete {username}"'}), 400
+        
+        # Use the Bank class to delete the user
+        from bank import Bank
+        
+        result = Bank.delete_user(username)
+        
+        if result:
+            return jsonify({
+                'success': True,
+                'message': f'User {username} has been successfully deleted'
+            })
+        else:
+            return jsonify({'success': False, 'message': f'Failed to delete user {username}'}), 500
+            
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
