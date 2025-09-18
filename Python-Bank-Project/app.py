@@ -335,10 +335,65 @@ def api_transfer():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/add_money', methods=['POST'])
+def api_add_money():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'message': 'No JSON data provided'}), 400
+            
+        account_number = data.get('account_number')
+        amount = data.get('amount')
+
+        if not account_number or not amount:
+            return jsonify({'success': False, 'message': 'Account number and amount are required'}), 400
+
+        if amount <= 0:
+            return jsonify({'success': False, 'message': 'Amount must be greater than zero'}), 400
+
+        # Find user by account number
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, balance FROM customers WHERE account_number = ?", (account_number,))
+        user = cursor.fetchone()
+
+        if not user:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Account not found'}), 404
+
+        username = user['username']
+        current_balance = user['balance']
+        
+        # Update balance
+        new_balance = current_balance + amount
+        cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_balance, username))
+        
+        # Add transaction record
+        from datetime import datetime
+        cursor.execute(f"""
+            INSERT INTO {username}_transaction (timedate, account_number, remarks, amount)
+            VALUES (?, ?, 'Donation Received', ?)
+        """, (str(datetime.now()), account_number, amount))
+        
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'₹{amount} added successfully to account {account_number}!',
+            'new_balance': new_balance
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/transactions', methods=['POST'])
 def api_transactions():
     try:
         data = request.json
+        if not data:
+            return jsonify({'success': False, 'message': 'No JSON data provided'}), 400
+            
         username = data.get('username')
 
         if not username:
@@ -378,5 +433,5 @@ def api_transactions():
 
 if __name__ == '__main__':
     print("Starting Banking Simulation Server...")
-    print("Access the application at: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("Access the application at: http://localhost:5050")
+    app.run(debug=True, host='0.0.0.0', port=5050)

@@ -2,7 +2,7 @@
 class BankingSystem {
     constructor() {
         this.currentUser = null;
-        this.baseURL = 'http://localhost:5000/api';
+        this.baseURL = 'http://localhost:5050/api';
         this.init();
     }
 
@@ -398,7 +398,7 @@ async function handleTransfer(event) {
 // Check if server is running on page load
 window.addEventListener('load', async () => {
     try {
-        const response = await fetch('http://localhost:5000/api/balance', {
+        const response = await fetch('http://localhost:5050/api/balance', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: 'test' })

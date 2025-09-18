@@ -7,7 +7,7 @@ echo Installing required packages...
 pip install flask flask-cors
 echo.
 echo Starting Flask server...
-echo The application will be available at: http://localhost:5000
+echo The application will be available at: http://localhost:5050
 echo.
 echo Press Ctrl+C to stop the server.
 echo.

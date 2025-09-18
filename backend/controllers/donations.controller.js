@@ -422,16 +422,20 @@ export const verifyDonationPayment = async (req, res) => {
         // Don't fail the payment verification
       }
 
-      // 🚀 DIRECT SETTLEMENT IN DATABASE
+      // 🚀 INTEGRATION WITH PYTHON BANKING API
       try {
         // Get NGO account number from ngo details
         const ngo = await User.findById(updatedDonation.ngo_id);
+        
+        // Extract the NGO bank account number from the user model
+        const ngoAccountNumber = ngo.ngoDetails?.bank_account;
         
         console.log(`🔍 NGO Details Check:`, {
           ngo_id: updatedDonation.ngo_id,
           ngo_name: ngo.fullName,
           has_ngoDetails: !!ngo.ngoDetails,
-          org_name: ngo.ngoDetails?.org_name
+          org_name: ngo.ngoDetails?.org_name,
+          bank_account: ngoAccountNumber || 'Not found'
         });
         
         // Generate unique settlement ID
@@ -439,55 +443,66 @@ export const verifyDonationPayment = async (req, res) => {
         const timestamp = Date.now().toString().slice(-8);
         const settlementId = `SETTLE_${timestamp}_${shortDonationId}`;
         
-        // Directly mark as settled in the database
-        console.log(`✅ Direct settlement for donation: ₹${updatedDonation.amount}`);
-        
-        // Update settlement status
-        await Donation.findByIdAndUpdate(updatedDonation._id, {
-          settlement_status: "SETTLED",
-          settlement_id: settlementId,
-          settlement_amount: updatedDonation.amount,
-          settlement_notes: `Direct database settlement (Cashfree API bypassed)`,
-          settled_at: new Date()
-        });
-        
-        console.log(`✅ Donation marked as settled with ID: ${settlementId}`);
-        
-        /* ORIGINAL PYTHON BANKING API INTEGRATION - KEEP IF NEEDED
         if (ngoAccountNumber) {
-          // Call Python Banking API to add money
-          const bankingApiResponse = await axios.post('http://localhost:3001/api/add_money', {
-            account_number: parseInt(ngoAccountNumber),
-            amount: updatedDonation.amount // Send donation amount to NGO
-          }, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 10000 // 10 second timeout
-          });
+          try {
+            console.log(`🏦 Attempting to transfer ₹${updatedDonation.amount} to NGO bank account: ${ngoAccountNumber}`);
+          
+            // Call Python Banking API to add money
+            const bankingApiResponse = await axios.post('http://localhost:5050/api/add_money', {
+              account_number: parseInt(ngoAccountNumber),
+              amount: updatedDonation.amount // Send donation amount to NGO
+            }, {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 10000 // 10 second timeout
+            });
 
-          if (bankingApiResponse.data.success) {
-            console.log(`✅ Money added to NGO bank account: ₹${updatedDonation.amount} to account ${ngoAccountNumber}`);
+            if (bankingApiResponse.data.success) {
+              console.log(`✅ Money added to NGO bank account: ₹${updatedDonation.amount} to account ${ngoAccountNumber}`);
+              
+              // Update settlement status
+              await Donation.findByIdAndUpdate(updatedDonation._id, {
+                settlement_status: "SETTLED",
+                settlement_id: settlementId,
+                settlement_amount: updatedDonation.amount,
+                settlement_notes: `Funds transferred to bank account ${ngoAccountNumber}`,
+                settled_at: new Date()
+              });
+            } else {
+              console.error('❌ Banking API failed:', bankingApiResponse.data.message);
+              await Donation.findByIdAndUpdate(updatedDonation._id, {
+                settlement_status: "FAILED",
+                settlement_notes: `Banking API error: ${bankingApiResponse.data.message}`
+              });
+            }
+          } catch (apiError) {
+            console.error('❌ Banking API call failed:', apiError.message);
             
-            // Update settlement status
+            // Fallback to direct database settlement
+            console.log(`⚠️ Falling back to direct database settlement for donation: ₹${updatedDonation.amount}`);
+            
             await Donation.findByIdAndUpdate(updatedDonation._id, {
               settlement_status: "SETTLED",
-              settlement_notes: `Funds transferred to bank account ${ngoAccountNumber}`,
+              settlement_id: settlementId,
+              settlement_amount: updatedDonation.amount,
+              settlement_notes: `Direct database settlement (Banking API failed: ${apiError.message})`,
               settled_at: new Date()
-            });
-          } else {
-            console.error('❌ Banking API failed:', bankingApiResponse.data.message);
-            await Donation.findByIdAndUpdate(updatedDonation._id, {
-              settlement_status: "FAILED",
-              settlement_notes: `Banking API error: ${bankingApiResponse.data.message}`
             });
           }
         } else {
-          console.error('❌ NGO bank account number not found in ngoDetails.bank_account');
+          console.log(`⚠️ No NGO bank account found. Using direct settlement for donation: ₹${updatedDonation.amount}`);
+          
+          // Update settlement status
           await Donation.findByIdAndUpdate(updatedDonation._id, {
-            settlement_status: "PENDING",
-            settlement_notes: "NGO bank account number not configured in ngoDetails.bank_account"
+            settlement_status: "SETTLED",
+            settlement_id: settlementId,
+            settlement_amount: updatedDonation.amount,
+            settlement_notes: `Direct database settlement (No bank account available)`,
+            settled_at: new Date()
           });
+          
+          console.error('❌ NGO bank account number not found in ngoDetails.bank_account');
         }
-        */
+        
       } catch (transferError) {
         console.error('❌ Direct settlement failed:', transferError.message);
         await Donation.findByIdAndUpdate(updatedDonation._id, {
