@@ -121,19 +121,17 @@ def main():
     view_transactions("Krish")
     view_transactions("saibhagat")
     
-    # Hash verification
-    import hashlib
-    print("\nHash verification:")
-    original_hash = hashlib.sha256(donor_id.encode()).hexdigest()
-    print(f"Original donor_id hash: {original_hash}")
+    # Value verification (no hashing)
+    print("\nValue verification (no hashing):")
+    print(f"Original donor_id: {donor_id}")
     
     # Use the original account number we retrieved earlier
-    sender_account_hash = hashlib.sha256(str(krish_info['account']).encode()).hexdigest()
-    print(f"Krish account hash: {sender_account_hash}")
+    krish_account_str = str(krish_info['account'])
+    print(f"Krish account number: {krish_account_str}")
     
     print("\nVerify that:")
-    print("1. Krish's transaction has the original donor_id hash")
-    print("2. Saibhagat's transaction has Krish's account hash as donor_id")
+    print("1. Krish's transaction has the original donor_id value")
+    print("2. Saibhagat's transaction has Krish's account number as donor_id")
 
 if __name__ == "__main__":
     main()

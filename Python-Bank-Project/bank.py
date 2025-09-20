@@ -9,13 +9,11 @@ class Bank:
         self.__username = username
         self.__account_number = account_number
         
-    def generate_hash(self, data):
-        """Generate SHA-256 hash for donor_id"""
+    def prepare_donor_id(self, data):
+        """Prepare donor_id for storage (no hashing)"""
         if data is None:
             return None
-        data_str = str(data)
-        hash_object = hashlib.sha256(data_str.encode())
-        return hash_object.hexdigest()
+        return str(data)
 
     def create_transaction_table(self):
         db_query(f"CREATE TABLE IF NOT EXISTS {self.__username}_transaction "
@@ -37,13 +35,13 @@ class Bank:
         db_query(
             f"UPDATE customers SET balance = '{test}' WHERE username = '{self.__username}'; ")
         self.balanceequiry()
-        hashed_donor_id = self.generate_hash(donor_id)
+        donor_id_value = self.prepare_donor_id(donor_id)
         db_query(f"INSERT INTO {self.__username}_transaction VALUES ("
                  f"'{datetime.datetime.now()}',"
                  f"'{self.__account_number}',"
                  f"'Amount Deposit',"
                  f"'{amount}',"
-                 f"'{hashed_donor_id}'"
+                 f"'{donor_id_value}'"
                  f")")
         print(f"{self.__username} Amount is Sucessfully Depositted into Your Account {self.__account_number}")
 
@@ -57,13 +55,13 @@ class Bank:
             db_query(
                 f"UPDATE customers SET balance = '{test}' WHERE username = '{self.__username}'; ")
             self.balanceequiry()
-            hashed_donor_id = self.generate_hash(donor_id)
+            donor_id_value = self.prepare_donor_id(donor_id)
             db_query(f"INSERT INTO {self.__username}_transaction VALUES ("
                      f"'{datetime.datetime.now()}',"
                      f"'{self.__account_number}',"
                      f"'Amount Withdraw',"
                      f"'{amount}',"
-                     f"'{hashed_donor_id}'"
+                     f"'{donor_id_value}'"
                      f")")
             print(
                 f"{self.__username} Amount is Sucessfully Withdraw from Your Account {self.__account_number}")
@@ -91,11 +89,11 @@ class Bank:
                 
                 # Process donor_id for sender's transaction record
                 # Original donor_id passed through if provided, or None if not provided
-                sender_donor_id = self.generate_hash(donor_id)
+                sender_donor_id = self.prepare_donor_id(donor_id)
                 
                 # For receiver's transaction, the sender's account number is the donor
                 # This ensures the recipient knows who sent the money
-                receiver_donor_id = self.generate_hash(self.__account_number)
+                receiver_donor_id = self.prepare_donor_id(self.__account_number)
                 
                 # Receiver's transaction record
                 db_query(f"INSERT INTO {receiver_username[0][0]}_transaction VALUES ("

@@ -57,6 +57,11 @@ class BankingSystem {
         document.getElementById('transfer-form').reset();
     }
 
+    showPassbook() {
+        this.showScreen('passbook-screen');
+        this.initPassbook();
+    }
+
     // API Communication Methods
     async apiCall(endpoint, data) {
         try {
@@ -74,6 +79,246 @@ class BankingSystem {
             console.error('API call failed:', error);
             return { success: false, message: 'Network error. Please try again.' };
         }
+    }
+    
+    // Passbook Methods
+    async initPassbook() {
+        if (!this.currentUser) {
+            this.showError('Please log in first.');
+            this.showWelcome();
+            return;
+        }
+
+        // Set default date range (last month)
+        const today = new Date();
+        const lastMonth = new Date();
+        lastMonth.setMonth(today.getMonth() - 1);
+        
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        
+        // Set date inputs with default values
+        document.getElementById('filter-start-date').value = formatDate(lastMonth);
+        document.getElementById('filter-end-date').value = formatDate(today);
+
+        // Set passbook header information
+        document.getElementById('passbook-name').textContent = this.currentUser.name;
+        document.getElementById('passbook-account-number').textContent = this.currentUser.account_number;
+        
+        // Initialize passbook state
+        this.passbookState = {
+            page: 1,
+            per_page: 10,
+            transaction_type: '',
+            start_date: formatDate(lastMonth),
+            end_date: formatDate(today),
+            totalPages: 1
+        };
+        
+        // Load account summary
+        await this.loadPassbookSummary();
+        
+        // Load initial transactions
+        await this.loadPassbookTransactions();
+        
+        // Set up event listeners (removing any existing ones first)
+        const applyFiltersBtn = document.getElementById('apply-filters');
+        const prevPageBtn = document.getElementById('prev-page');
+        const nextPageBtn = document.getElementById('next-page');
+        const exportCsvBtn = document.getElementById('export-csv');
+        
+        // Remove existing event listeners (clone and replace)
+        const newApplyFiltersBtn = applyFiltersBtn.cloneNode(true);
+        applyFiltersBtn.parentNode.replaceChild(newApplyFiltersBtn, applyFiltersBtn);
+        
+        const newPrevPageBtn = prevPageBtn.cloneNode(true);
+        prevPageBtn.parentNode.replaceChild(newPrevPageBtn, prevPageBtn);
+        
+        const newNextPageBtn = nextPageBtn.cloneNode(true);
+        nextPageBtn.parentNode.replaceChild(newNextPageBtn, nextPageBtn);
+        
+        const newExportCsvBtn = exportCsvBtn.cloneNode(true);
+        exportCsvBtn.parentNode.replaceChild(newExportCsvBtn, exportCsvBtn);
+        
+        // Add new event listeners
+        newApplyFiltersBtn.addEventListener('click', async () => {
+            // Update filter values
+            this.passbookState.transaction_type = document.getElementById('filter-type').value;
+            this.passbookState.start_date = document.getElementById('filter-start-date').value;
+            this.passbookState.end_date = document.getElementById('filter-end-date').value;
+            this.passbookState.page = 1; // Reset to first page
+            
+            // Reload data with new filters
+            await this.loadPassbookSummary();
+            await this.loadPassbookTransactions();
+        });
+        
+        newPrevPageBtn.addEventListener('click', async () => {
+            if (this.passbookState.page > 1) {
+                this.passbookState.page--;
+                await this.loadPassbookTransactions();
+            }
+        });
+        
+        newNextPageBtn.addEventListener('click', async () => {
+            if (this.passbookState.page < this.passbookState.totalPages) {
+                this.passbookState.page++;
+                await this.loadPassbookTransactions();
+            }
+        });
+        
+        newExportCsvBtn.addEventListener('click', () => {
+            this.exportPassbookCSV();
+        });
+    }
+    
+    async loadPassbookSummary() {
+        if (!this.currentUser) return;
+        
+        try {
+            const data = {
+                username: this.currentUser.username,
+                start_date: this.passbookState.start_date,
+                end_date: this.passbookState.end_date
+            };
+            
+            const result = await this.apiCall('/api/epassbook/summary', data);
+            
+            if (result.success) {
+                const summary = result.account_summary;
+                
+                // Update summary cards
+                document.getElementById('total-deposits').textContent = '₹' + summary.total_deposits.toLocaleString();
+                document.getElementById('total-withdrawals').textContent = '₹' + summary.total_withdrawals.toLocaleString();
+                document.getElementById('total-transactions').textContent = summary.transaction_count.total.toLocaleString();
+                
+                // Update current balance
+                document.getElementById('passbook-balance').textContent = summary.current_balance.toLocaleString();
+                
+                // Update global user balance
+                this.currentUser.balance = summary.current_balance;
+                this.updateBalance();
+            } else {
+                console.error('Failed to load account summary:', result.message);
+                this.showError('Failed to load account summary. ' + result.message);
+            }
+        } catch (error) {
+            console.error('Error loading account summary:', error);
+            this.showError('Error loading account summary. Please try again.');
+        }
+    }
+    
+    async loadPassbookTransactions() {
+        if (!this.currentUser) return;
+        
+        try {
+            const data = {
+                username: this.currentUser.username,
+                page: this.passbookState.page,
+                per_page: this.passbookState.per_page,
+                transaction_type: this.passbookState.transaction_type,
+                start_date: this.passbookState.start_date,
+                end_date: this.passbookState.end_date
+            };
+            
+            const result = await this.apiCall('/api/epassbook', data);
+            
+            if (result.success) {
+                const transactions = result.transactions;
+                const pagination = result.pagination;
+                
+                // Update pagination info
+                this.passbookState.totalPages = pagination.total_pages;
+                document.getElementById('page-info').textContent = `Page ${pagination.current_page} of ${pagination.total_pages}`;
+                
+                // Enable/disable pagination buttons
+                document.getElementById('prev-page').disabled = pagination.current_page <= 1;
+                document.getElementById('next-page').disabled = pagination.current_page >= pagination.total_pages;
+                
+                // Clear transactions list
+                const transactionsList = document.getElementById('transactions-list');
+                transactionsList.innerHTML = '';
+                
+                // Show "No transactions" message if necessary
+                const noTransactionsMsg = document.getElementById('no-transactions');
+                if (transactions.length === 0) {
+                    noTransactionsMsg.classList.remove('hidden');
+                } else {
+                    noTransactionsMsg.classList.add('hidden');
+                    
+                    // Add each transaction to the table
+                    transactions.forEach(tx => {
+                        const row = document.createElement('tr');
+                        
+                        // Format date
+                        const txDate = new Date(tx.timedate);
+                        const formattedDate = txDate.toLocaleString();
+                        
+                        // Determine transaction class (credit/debit)
+                        const amountClass = tx.transaction_direction === 'credit' ? 'transaction-credit' : 'transaction-debit';
+                        const amountPrefix = tx.transaction_direction === 'credit' ? '+' : '-';
+                        
+                        row.innerHTML = `
+                            <td>${formattedDate}</td>
+                            <td>${tx.transaction_type}</td>
+                            <td class="${amountClass}">${amountPrefix}₹${tx.amount.toLocaleString()}</td>
+                            <td>${tx.donor_id || 'N/A'}</td>
+                        `;
+                        
+                        transactionsList.appendChild(row);
+                    });
+                }
+            } else {
+                console.error('Failed to load transactions:', result.message);
+                this.showError('Failed to load transactions. ' + result.message);
+            }
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+            this.showError('Error loading transactions. Please try again.');
+        }
+    }
+    
+    exportPassbookCSV() {
+        if (!this.currentUser) return;
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('username', this.currentUser.username);
+        formData.append('export_format', 'csv');
+        formData.append('transaction_type', this.passbookState.transaction_type);
+        formData.append('start_date', this.passbookState.start_date);
+        formData.append('end_date', this.passbookState.end_date);
+        
+        // Create a temporary form element
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `${this.baseURL}/api/epassbook`;
+        form.target = '_blank'; // Open in new tab
+        form.style.display = 'none';
+        
+        // Add form fields
+        for (const [key, value] of Object.entries({
+            username: this.currentUser.username,
+            export_format: 'csv',
+            transaction_type: this.passbookState.transaction_type,
+            start_date: this.passbookState.start_date,
+            end_date: this.passbookState.end_date
+        })) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
+        
+        // Submit form
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
     }
 
     // User Management
@@ -231,6 +476,200 @@ class BankingSystem {
             this.showError(result.message);
             return null;
         }
+    }
+
+    // Passbook Methods
+    async initPassbook() {
+        if (!this.currentUser) {
+            this.showError('Please log in first.');
+            this.showWelcome();
+            return;
+        }
+
+        // Set passbook header information
+        document.getElementById('passbook-name').textContent = this.currentUser.name;
+        document.getElementById('passbook-account-number').textContent = this.currentUser.account_number;
+        document.getElementById('passbook-balance').textContent = this.currentUser.balance.toLocaleString();
+        
+        // Initialize passbook state
+        this.passbookState = {
+            page: 1,
+            per_page: 10,
+            transaction_type: '',
+            start_date: '',
+            end_date: '',
+            totalPages: 1
+        };
+        
+        // Load account summary
+        await this.loadPassbookSummary();
+        
+        // Load initial transactions
+        await this.loadPassbookTransactions();
+        
+        // Set up event listeners
+        document.getElementById('apply-filters').addEventListener('click', async () => {
+            // Update filter values
+            this.passbookState.transaction_type = document.getElementById('filter-type').value;
+            this.passbookState.start_date = document.getElementById('filter-start-date').value;
+            this.passbookState.end_date = document.getElementById('filter-end-date').value;
+            this.passbookState.page = 1; // Reset to first page
+            
+            // Reload data with new filters
+            await this.loadPassbookSummary();
+            await this.loadPassbookTransactions();
+        });
+        
+        document.getElementById('prev-page').addEventListener('click', async () => {
+            if (this.passbookState.page > 1) {
+                this.passbookState.page--;
+                await this.loadPassbookTransactions();
+            }
+        });
+        
+        document.getElementById('next-page').addEventListener('click', async () => {
+            if (this.passbookState.page < this.passbookState.totalPages) {
+                this.passbookState.page++;
+                await this.loadPassbookTransactions();
+            }
+        });
+        
+        document.getElementById('export-csv').addEventListener('click', () => {
+            this.exportPassbookCSV();
+        });
+    }
+    
+    async loadPassbookSummary() {
+        if (!this.currentUser) return;
+        
+        try {
+            const data = {
+                username: this.currentUser.username,
+                start_date: this.passbookState.start_date,
+                end_date: this.passbookState.end_date
+            };
+            
+            const result = await this.apiCall('/epassbook/summary', data);
+            
+            if (result.success) {
+                const summary = result.account_summary;
+                
+                // Update summary cards
+                document.getElementById('total-deposits').textContent = '₹' + summary.total_deposits.toLocaleString();
+                document.getElementById('total-withdrawals').textContent = '₹' + summary.total_withdrawals.toLocaleString();
+                document.getElementById('total-transactions').textContent = summary.transaction_count.total.toLocaleString();
+                
+                // Update current balance
+                document.getElementById('passbook-balance').textContent = summary.current_balance.toLocaleString();
+                this.currentUser.balance = summary.current_balance;
+            } else {
+                console.error('Failed to load account summary:', result.message);
+            }
+        } catch (error) {
+            console.error('Error loading account summary:', error);
+        }
+    }
+    
+    async loadPassbookTransactions() {
+        if (!this.currentUser) return;
+        
+        try {
+            const data = {
+                username: this.currentUser.username,
+                page: this.passbookState.page,
+                per_page: this.passbookState.per_page,
+                transaction_type: this.passbookState.transaction_type,
+                start_date: this.passbookState.start_date,
+                end_date: this.passbookState.end_date
+            };
+            
+            const result = await this.apiCall('/epassbook', data);
+            
+            if (result.success) {
+                const transactions = result.transactions;
+                const pagination = result.pagination;
+                
+                // Update pagination info
+                this.passbookState.totalPages = pagination.total_pages;
+                document.getElementById('page-info').textContent = `Page ${pagination.current_page} of ${pagination.total_pages}`;
+                
+                // Enable/disable pagination buttons
+                document.getElementById('prev-page').disabled = !pagination.has_prev;
+                document.getElementById('next-page').disabled = !pagination.has_next;
+                
+                // Clear transactions list
+                const transactionsList = document.getElementById('transactions-list');
+                transactionsList.innerHTML = '';
+                
+                // Show "No transactions" message if necessary
+                const noTransactionsMsg = document.getElementById('no-transactions');
+                if (transactions.length === 0) {
+                    noTransactionsMsg.classList.remove('hidden');
+                } else {
+                    noTransactionsMsg.classList.add('hidden');
+                    
+                    // Add each transaction to the table
+                    transactions.forEach(tx => {
+                        const row = document.createElement('tr');
+                        
+                        // Format date
+                        const txDate = new Date(tx.timedate);
+                        const formattedDate = txDate.toLocaleString();
+                        
+                        // Determine transaction class (credit/debit)
+                        const amountClass = tx.transaction_direction === 'credit' ? 'transaction-credit' : 'transaction-debit';
+                        const amountPrefix = tx.transaction_direction === 'credit' ? '+' : '-';
+                        
+                        row.innerHTML = `
+                            <td>${formattedDate}</td>
+                            <td>${tx.transaction_type}</td>
+                            <td class="${amountClass}">${amountPrefix}₹${tx.amount.toLocaleString()}</td>
+                            <td>${tx.donor_id || 'N/A'}</td>
+                        `;
+                        
+                        transactionsList.appendChild(row);
+                    });
+                }
+            } else {
+                console.error('Failed to load transactions:', result.message);
+                this.showError('Failed to load transactions. ' + result.message);
+            }
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+            this.showError('Error loading transactions. Please try again.');
+        }
+    }
+    
+    exportPassbookCSV() {
+        if (!this.currentUser) return;
+        
+        const queryParams = new URLSearchParams({
+            username: this.currentUser.username,
+            export_format: 'csv',
+            transaction_type: this.passbookState.transaction_type,
+            start_date: this.passbookState.start_date,
+            end_date: this.passbookState.end_date
+        });
+        
+        // Create a form for the POST request
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `${this.baseURL}/epassbook`;
+        form.style.display = 'none';
+        
+        // Add fields to the form
+        for (const [key, value] of queryParams.entries()) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
+        
+        // Add form to the document and submit it
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
     }
 
     // Utility Methods

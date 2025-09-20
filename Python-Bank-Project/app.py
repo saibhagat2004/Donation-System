@@ -1,8 +1,11 @@
-from flask import Flask, jsonify, request, render_template_string, send_from_directory
+from flask import Flask, jsonify, request, render_template_string, send_from_directory, make_response
 from flask_cors import CORS
 import os
 import sqlite3
 import hashlib
+import io
+import csv
+from datetime import datetime
 from customer import Customer
 from bank import Bank
 from register import SignUp, SignIn
@@ -203,20 +206,17 @@ def api_deposit():
         new_balance = current_balance + amount
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_balance, username))
         
-        # Hash donor_id if provided
-        hashed_donor_id = None
+        # Store donor_id directly without hashing
+        donor_id_value = None
         if donor_id:
-            import hashlib
-            donor_id_str = str(donor_id)
-            hash_object = hashlib.sha256(donor_id_str.encode())
-            hashed_donor_id = hash_object.hexdigest()
+            donor_id_value = str(donor_id)  # Convert to string if it's not already
         
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
             INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
             VALUES (?, ?, 'Amount Deposit', ?, ?)
-        """, (str(datetime.now()), account_number, amount, hashed_donor_id))
+        """, (str(datetime.now()), account_number, amount, donor_id_value))
         
         conn.commit()
         conn.close()
@@ -257,20 +257,17 @@ def api_withdraw():
         new_balance = current_balance - amount
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_balance, username))
         
-        # Hash donor_id if provided
-        hashed_donor_id = None
+        # Store donor_id directly without hashing
+        donor_id_value = None
         if donor_id:
-            import hashlib
-            donor_id_str = str(donor_id)
-            hash_object = hashlib.sha256(donor_id_str.encode())
-            hashed_donor_id = hash_object.hexdigest()
+            donor_id_value = str(donor_id)  # Convert to string if it's not already
             
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
             INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
             VALUES (?, ?, 'Amount Withdraw', ?, ?)
-        """, (str(datetime.now()), account_number, amount, hashed_donor_id))
+        """, (str(datetime.now()), account_number, amount, donor_id_value))
         
         conn.commit()
         conn.close()
@@ -340,17 +337,11 @@ def api_transfer():
         
         # For sender's transaction, use the original donor_id if provided
         if donor_id:
-            import hashlib
-            donor_id_str = str(donor_id)
-            hash_object = hashlib.sha256(donor_id_str.encode())
-            sender_donor_id = hash_object.hexdigest()
+            sender_donor_id = str(donor_id)
         
-        # For receiver's transaction, hash the sender's account number as the donor
+        # For receiver's transaction, use the sender's account number as the donor
         # This ensures the recipient knows who sent the money
-        import hashlib
-        sender_account_str = str(sender_account)
-        hash_object = hashlib.sha256(sender_account_str.encode())
-        receiver_donor_id = hash_object.hexdigest()
+        receiver_donor_id = str(sender_account)
             
         # Add transaction records
         from datetime import datetime
@@ -414,20 +405,17 @@ def api_add_money():
         new_balance = current_balance + amount
         cursor.execute("UPDATE customers SET balance = ? WHERE username = ?", (new_balance, username))
         
-        # Hash donor_id if provided
-        hashed_donor_id = None
+        # Store donor_id directly without hashing
+        donor_id_value = None
         if donor_id:
-            import hashlib
-            donor_id_str = str(donor_id)
-            hash_object = hashlib.sha256(donor_id_str.encode())
-            hashed_donor_id = hash_object.hexdigest()
+            donor_id_value = str(donor_id)  # Convert to string if it's not already
         
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
             INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
             VALUES (?, ?, 'Donation Received', ?, ?)
-        """, (str(datetime.now()), account_number, amount, hashed_donor_id))
+        """, (str(datetime.now()), account_number, amount, donor_id_value))
         
         conn.commit()
         conn.close()
@@ -484,6 +472,281 @@ def api_transactions():
             })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/epassbook', methods=['POST'])
+def api_epassbook():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'message': 'No JSON data provided'}), 400
+            
+        username = data.get('username')
+        if not username:
+            return jsonify({'success': False, 'message': 'Username is required'}), 400
+            
+        # Optional parameters for filtering and pagination
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        transaction_type = data.get('transaction_type')  # Can be 'deposit', 'withdraw', 'transfer' or None for all
+        page = int(data.get('page', 1))
+        per_page = int(data.get('per_page', 20))  # Default 20 transactions per page
+        export_format = data.get('export_format')  # 'csv' for CSV export
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        if per_page < 1 or per_page > 100:  # Limit max per_page to 100
+            per_page = 20
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Start building the query with parameters
+            query = f"SELECT * FROM {username}_transaction WHERE 1=1"
+            params = []
+            
+            # Add date filters if provided
+            if start_date:
+                query += " AND timedate >= ?"
+                params.append(start_date)
+            
+            if end_date:
+                query += " AND timedate <= ?"
+                params.append(end_date)
+            
+            # Add transaction type filter if provided
+            if transaction_type:
+                if transaction_type.lower() == 'deposit':
+                    query += " AND transaction_type LIKE '%Deposit%'"
+                elif transaction_type.lower() == 'withdraw':
+                    query += " AND transaction_type LIKE '%Withdraw%'"
+                elif transaction_type.lower() == 'transfer':
+                    query += " AND transaction_type LIKE '%Transfer%'"
+            
+            # Add ordering and pagination
+            offset = (page - 1) * per_page
+            query += " ORDER BY timedate DESC LIMIT ? OFFSET ?"
+            params.extend([per_page, offset])
+            
+            # Execute the query
+            cursor.execute(query, params)
+            transactions = cursor.fetchall()
+            
+            # Get total count for pagination
+            count_query = f"SELECT COUNT(*) as total FROM {username}_transaction WHERE 1=1"
+            count_params = []
+            
+            # Add the same filters to count query
+            if start_date:
+                count_query += " AND timedate >= ?"
+                count_params.append(start_date)
+            
+            if end_date:
+                count_query += " AND timedate <= ?"
+                count_params.append(end_date)
+            
+            if transaction_type:
+                if transaction_type.lower() == 'deposit':
+                    count_query += " AND transaction_type LIKE '%Deposit%'"
+                elif transaction_type.lower() == 'withdraw':
+                    count_query += " AND transaction_type LIKE '%Withdraw%'"
+                elif transaction_type.lower() == 'transfer':
+                    count_query += " AND transaction_type LIKE '%Transfer%'"
+            
+            cursor.execute(count_query, count_params)
+            total_count = cursor.fetchone()['total']
+            total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
+            
+            # Format the transaction data
+            transaction_list = []
+            for trans in transactions:
+                transaction_list.append({
+                    'timedate': trans['timedate'],
+                    'account_number': trans['account_number'],
+                    'transaction_type': trans['transaction_type'],
+                    'amount': trans['amount'],
+                    'donor_id': trans['donor_id'],
+                    # Add additional useful data
+                    'transaction_direction': 'credit' if 'Deposit' in trans['transaction_type'] or 'From' in trans['transaction_type'] else 'debit'
+                })
+            
+            # Check if we need to export to CSV
+            if export_format == 'csv':
+                # Create CSV in memory
+                output = io.StringIO()
+                csv_writer = csv.writer(output)
+                
+                # Write header
+                csv_writer.writerow(['Date & Time', 'Account Number', 'Transaction Type', 'Amount', 'Direction', 'Reference ID'])
+                
+                # Write data
+                for trans in transaction_list:
+                    csv_writer.writerow([
+                        trans['timedate'],
+                        trans['account_number'],
+                        trans['transaction_type'],
+                        trans['amount'],
+                        trans['transaction_direction'],
+                        trans['donor_id'] or 'N/A'
+                    ])
+                
+                # Create response
+                output.seek(0)
+                current_date = datetime.now().strftime("%Y-%m-%d")
+                response = make_response(output.getvalue())
+                response.headers["Content-Disposition"] = f"attachment; filename=ePassbook_{username}_{current_date}.csv"
+                response.headers["Content-Type"] = "text/csv"
+                
+                conn.close()
+                return response
+            
+            conn.close()
+            
+            # Return the paginated results with metadata
+            return jsonify({
+                'success': True,
+                'transactions': transaction_list,
+                'pagination': {
+                    'total_records': total_count,
+                    'total_pages': total_pages,
+                    'current_page': page,
+                    'per_page': per_page,
+                    'has_next': page < total_pages,
+                    'has_prev': page > 1
+                }
+            })
+        except sqlite3.OperationalError as e:
+            # Table doesn't exist yet or other SQLite error
+            conn.close()
+            return jsonify({
+                'success': False,
+                'message': f'Database operation error: {str(e)}',
+                'transactions': []
+            }), 404
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error processing request: {str(e)}'}), 500
+
+@app.route('/api/epassbook/summary', methods=['POST'])
+def api_epassbook_summary():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'message': 'No JSON data provided'}), 400
+            
+        username = data.get('username')
+        if not username:
+            return jsonify({'success': False, 'message': 'Username is required'}), 400
+            
+        # Optional parameters for date range
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Get basic account details
+            cursor.execute("SELECT name, account_number, balance FROM customers WHERE username = ?", (username,))
+            account_info = cursor.fetchone()
+            
+            if not account_info:
+                conn.close()
+                return jsonify({'success': False, 'message': 'Account not found'}), 404
+            
+            # Build queries with parameters for transaction analysis
+            params = []
+            where_clause = "1=1"
+            
+            if start_date:
+                where_clause += " AND timedate >= ?"
+                params.append(start_date)
+            
+            if end_date:
+                where_clause += " AND timedate <= ?"
+                params.append(end_date)
+            
+            # Get total deposits
+            cursor.execute(f"""
+                SELECT COALESCE(SUM(amount), 0) as total 
+                FROM {username}_transaction 
+                WHERE {where_clause} AND (
+                    transaction_type LIKE '%Deposit%' OR 
+                    transaction_type LIKE '%From%' OR 
+                    transaction_type LIKE '%Received%'
+                )
+            """, params)
+            total_deposits = cursor.fetchone()['total']
+            
+            # Get total withdrawals
+            cursor.execute(f"""
+                SELECT COALESCE(SUM(amount), 0) as total 
+                FROM {username}_transaction 
+                WHERE {where_clause} AND (
+                    transaction_type LIKE '%Withdraw%' OR 
+                    transaction_type LIKE '%Transfer ->%'
+                )
+            """, params)
+            total_withdrawals = cursor.fetchone()['total']
+            
+            # Get transaction counts
+            cursor.execute(f"""
+                SELECT 
+                    COUNT(*) as total_transactions,
+                    SUM(CASE WHEN transaction_type LIKE '%Deposit%' THEN 1 ELSE 0 END) as deposit_count,
+                    SUM(CASE WHEN transaction_type LIKE '%Withdraw%' THEN 1 ELSE 0 END) as withdrawal_count,
+                    SUM(CASE WHEN transaction_type LIKE '%Transfer%' THEN 1 ELSE 0 END) as transfer_count
+                FROM {username}_transaction 
+                WHERE {where_clause}
+            """, params)
+            counts = cursor.fetchone()
+            
+            # Get first transaction date
+            cursor.execute(f"SELECT MIN(timedate) as first_date FROM {username}_transaction WHERE {where_clause}", params)
+            first_transaction = cursor.fetchone()['first_date']
+            
+            # Get most recent transaction
+            cursor.execute(f"SELECT MAX(timedate) as last_date FROM {username}_transaction WHERE {where_clause}", params)
+            last_transaction = cursor.fetchone()['last_date']
+            
+            conn.close()
+            
+            # Calculate net flow
+            net_flow = total_deposits - total_withdrawals
+            
+            # Return the account summary
+            return jsonify({
+                'success': True,
+                'account_summary': {
+                    'name': account_info['name'],
+                    'account_number': account_info['account_number'],
+                    'current_balance': account_info['balance'],
+                    'total_deposits': total_deposits,
+                    'total_withdrawals': total_withdrawals,
+                    'net_flow': net_flow,
+                    'transaction_count': {
+                        'total': counts['total_transactions'],
+                        'deposits': counts['deposit_count'],
+                        'withdrawals': counts['withdrawal_count'],
+                        'transfers': counts['transfer_count']
+                    },
+                    'first_transaction_date': first_transaction,
+                    'last_transaction_date': last_transaction,
+                    'period': {
+                        'start_date': start_date or first_transaction,
+                        'end_date': end_date or last_transaction
+                    }
+                }
+            })
+        except sqlite3.OperationalError as e:
+            # Table doesn't exist yet or other SQLite error
+            conn.close()
+            return jsonify({
+                'success': False,
+                'message': f'Database operation error: {str(e)}'
+            }), 404
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error processing request: {str(e)}'}), 500
 
 @app.route('/api/delete_user', methods=['POST'])
 def api_delete_user():

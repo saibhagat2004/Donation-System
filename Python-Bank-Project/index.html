@@ -137,6 +137,12 @@
               <h3>Fund Transfer</h3>
               <p>Transfer money to another account</p>
             </div>
+
+            <div class="service-card" onclick="bankingSystem.showPassbook()">
+              <div class="service-icon">📒</div>
+              <h3>ePassbook</h3>
+              <p>View your transaction history</p>
+            </div>
           </div>
         </div>
       </div>
@@ -246,6 +252,99 @@
               </button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- Passbook Screen -->
+      <div id="passbook-screen" class="screen">
+        <div class="passbook-container">
+          <h2>ePassbook</h2>
+          <div class="passbook-header">
+            <div class="account-summary">
+              <p>Account Holder: <strong><span id="passbook-name">-</span></strong></p>
+              <p>Account Number: <strong><span id="passbook-account-number">-</span></strong></p>
+              <p>Current Balance: <strong>₹<span id="passbook-balance">-</span></strong></p>
+            </div>
+            <div class="passbook-actions">
+              <button id="export-csv" class="btn btn-outline">
+                <span class="btn-icon">📥</span>
+                Export CSV
+              </button>
+            </div>
+          </div>
+          
+          <div class="passbook-filters">
+            <div class="filter-group">
+              <label for="filter-type">Transaction Type</label>
+              <select id="filter-type">
+                <option value="">All Transactions</option>
+                <option value="deposit">Deposits</option>
+                <option value="withdraw">Withdrawals</option>
+                <option value="transfer">Transfers</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filter-start-date">From Date</label>
+              <input type="date" id="filter-start-date">
+            </div>
+            <div class="filter-group">
+              <label for="filter-end-date">To Date</label>
+              <input type="date" id="filter-end-date">
+            </div>
+            <button id="apply-filters" class="btn btn-primary">
+              <span class="btn-icon">🔍</span>
+              Apply Filters
+            </button>
+          </div>
+          
+          <div class="passbook-summary" id="passbook-summary">
+            <div class="summary-card">
+              <div class="summary-icon">📥</div>
+              <div class="summary-value" id="total-deposits">₹0</div>
+              <div class="summary-label">Total Deposits</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">📤</div>
+              <div class="summary-value" id="total-withdrawals">₹0</div>
+              <div class="summary-label">Total Withdrawals</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">📊</div>
+              <div class="summary-value" id="total-transactions">0</div>
+              <div class="summary-label">Transactions</div>
+            </div>
+          </div>
+          
+          <div class="transactions-container">
+            <table class="transactions-table">
+              <thead>
+                <tr>
+                  <th>Date & Time</th>
+                  <th>Transaction Type</th>
+                  <th>Amount</th>
+                  <th>Reference</th>
+                </tr>
+              </thead>
+              <tbody id="transactions-list">
+                <!-- Transactions will be populated here via JavaScript -->
+              </tbody>
+            </table>
+            <div id="no-transactions" class="no-transactions hidden">
+              No transactions found for the selected filters.
+            </div>
+          </div>
+          
+          <div class="pagination">
+            <button id="prev-page" class="btn btn-outline pagination-btn">Previous</button>
+            <span id="page-info">Page 1 of 1</span>
+            <button id="next-page" class="btn btn-outline pagination-btn">Next</button>
+          </div>
+          
+          <div class="button-group mt-20">
+            <button class="btn btn-secondary" onclick="bankingSystem.showDashboard()">
+              Back to Dashboard
+            </button>
+          </div>
         </div>
       </div>
 

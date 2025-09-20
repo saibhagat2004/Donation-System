@@ -176,18 +176,16 @@ def main():
         test_donor_id
     )
     
-    print("\nStep 2: Verifying Hashed Values")
-    import hashlib
+    print("\nStep 2: Verifying Values (No Hashing)")
     
-    # Verify sender's transaction should have the original donor_id hashed
-    original_hash = hashlib.sha256(test_donor_id.encode()).hexdigest()
-    print(f"Original donor_id hash: {original_hash}")
+    # Verify sender's transaction should have the original donor_id directly
+    print(f"Original donor_id: {test_donor_id}")
     
-    # Verify receiver's transaction should have sender's account number hashed
-    sender_account_hash = hashlib.sha256(str(users["sender_account"]).encode()).hexdigest()
-    print(f"Sender account hash: {sender_account_hash}")
+    # Verify receiver's transaction should have sender's account number directly
+    sender_account_str = str(users["sender_account"])
+    print(f"Sender account: {sender_account_str}")
     
-    print("\nTest complete. Compare these hash values with the transaction records above.")
+    print("\nTest complete. Compare these values with the transaction records above.")
 
 if __name__ == "__main__":
     main()
