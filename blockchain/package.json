@@ -14,10 +14,12 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "hardhat": "^2.19.5",
     "@nomicfoundation/hardhat-ethers": "^3.0.5",
     "@nomicfoundation/hardhat-verify": "^2.0.3",
+    "chai": "^4.3.7",
+    "chai-as-promised": "^8.0.2",
+    "chai-ethers": "^0.0.1",
     "ethers": "^6.10.0",
-    "chai": "^4.3.7"
+    "hardhat": "^2.19.5"
   }
 }
