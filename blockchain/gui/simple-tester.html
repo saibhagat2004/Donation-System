@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Ganache Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        #output {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            min-height: 200px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        input {
+            padding: 8px;
+            width: 100%;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h1>Simple Ganache Connection Test</h1>
+    <p>This is a minimal tester to debug ethers.js connection issues</p>
+    
+    <div>
+        <label>Contract Address:</label>
+        <input type="text" id="contractAddress" value="0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab">
+    </div>
+    
+    <button onclick="testEthersLoaded()">1. Test Ethers Loaded</button>
+    <button onclick="testConnection()">2. Test Connection</button>
+    <button onclick="getAccounts()">3. Get Accounts</button>
+    <button onclick="testContract()">4. Test Contract</button>
+    
+    <div id="output">Output will appear here...</div>
+
+    <!-- Load ethers directly from unpkg (alternative CDN) -->
+    <script src="https://unpkg.com/ethers@6.10.0/dist/ethers.umd.js"></script>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message, isError = false) {
+            const className = isError ? 'error' : 'success';
+            output.innerHTML += `<div class="${className}">${message}</div>`;
+            console.log(message);
+        }
+        
+        function clear() {
+            output.innerHTML = '';
+        }
+        
+        function testEthersLoaded() {
+            clear();
+            try {
+                if (typeof ethers !== 'undefined') {
+                    log(`✅ ethers.js is loaded! Version: ${ethers.version || 'unknown'}`);
+                    window.ethersLoaded = true;
+                } else {
+                    log('❌ ethers.js is NOT loaded!', true);
+                }
+            } catch (error) {
+                log(`❌ Error checking ethers: ${error.message}`, true);
+            }
+        }
+        
+        async function testConnection() {
+            clear();
+            if (!window.ethersLoaded) {
+                log('Please check if ethers is loaded first', true);
+                return;
+            }
+            
+            try {
+                log('Testing connection to Ganache...');
+                
+                // Try with 127.0.0.1
+                try {
+                    log('Attempting connection with 127.0.0.1...');
+                    window.provider = new ethers.JsonRpcProvider('http://127.0.0.1:7545');
+                    const blockNumber = await window.provider.getBlockNumber();
+                    log(`✅ Connected to Ganache! Block number: ${blockNumber}`);
+                    return;
+                } catch (e) {
+                    log(`Failed with 127.0.0.1: ${e.message}`, true);
+                }
+                
+                // Try with localhost
+                try {
+                    log('Attempting connection with localhost...');
+                    window.provider = new ethers.JsonRpcProvider('http://localhost:7545');
+                    const blockNumber = await window.provider.getBlockNumber();
+                    log(`✅ Connected to Ganache! Block number: ${blockNumber}`);
+                    return;
+                } catch (e) {
+                    log(`Failed with localhost: ${e.message}`, true);
+                }
+                
+                log('❌ All connection attempts failed', true);
+            } catch (error) {
+                log(`❌ Connection error: ${error.message}`, true);
+            }
+        }
+        
+        async function getAccounts() {
+            clear();
+            if (!window.provider) {
+                log('Please establish a connection first', true);
+                return;
+            }
+            
+            try {
+                log('Getting accounts...');
+                
+                // Try different methods to get accounts
+                try {
+                    // Method 1: listAccounts
+                    const accounts = await window.provider.listAccounts();
+                    log(`✅ Found ${accounts.length} accounts`);
+                    
+                    for (let i = 0; i < accounts.length; i++) {
+                        const address = accounts[i].address;
+                        const balance = await window.provider.getBalance(address);
+                        log(`Account ${i}: ${address} - ${ethers.formatEther(balance)} ETH`);
+                    }
+                    
+                    // Save first account
+                    if (accounts.length > 0) {
+                        window.signer = accounts[0];
+                    }
+                } catch (e) {
+                    log(`listAccounts failed: ${e.message}`, true);
+                    
+                    // Method 2: Try getSigner directly
+                    try {
+                        window.signer = await window.provider.getSigner();
+                        const address = await window.signer.getAddress();
+                        log(`✅ Got signer: ${address}`);
+                    } catch (e2) {
+                        log(`getSigner failed: ${e2.message}`, true);
+                        
+                        // Method 3: Try getting signers manually
+                        try {
+                            log('Trying manual account detection...');
+                            for (let i = 0; i < 10; i++) {
+                                try {
+                                    const signer = await window.provider.getSigner(i);
+                                    const address = await signer.getAddress();
+                                    const balance = await window.provider.getBalance(address);
+                                    log(`Account ${i}: ${address} - ${ethers.formatEther(balance)} ETH`);
+                                    
+                                    // Save first account
+                                    if (i === 0) {
+                                        window.signer = signer;
+                                    }
+                                } catch (e3) {
+                                    break;
+                                }
+                            }
+                        } catch (e3) {
+                            log(`Manual account detection failed: ${e3.message}`, true);
+                        }
+                    }
+                }
+                
+                if (!window.signer) {
+                    log('❌ Could not get any signer', true);
+                }
+            } catch (error) {
+                log(`❌ Error getting accounts: ${error.message}`, true);
+            }
+        }
+        
+        async function testContract() {
+            clear();
+            if (!window.provider) {
+                log('Please establish a connection first', true);
+                return;
+            }
+            
+            if (!window.signer) {
+                log('Please get accounts first', true);
+                return;
+            }
+            
+            const contractAddress = document.getElementById('contractAddress').value;
+            if (!contractAddress) {
+                log('Please enter a contract address', true);
+                return;
+            }
+            
+            try {
+                log(`Testing contract at ${contractAddress}...`);
+                
+                // Simple ABI with just the required functions
+                const minimalABI = [
+                    "function owner() view returns (address)",
+                    "function totalDonations() view returns (uint256)"
+                ];
+                
+                const contract = new ethers.Contract(contractAddress, minimalABI, window.signer);
+                log('Contract instance created');
+                
+                try {
+                    const owner = await contract.owner();
+                    log(`✅ Contract owner: ${owner}`);
+                    
+                    const totalDonations = await contract.totalDonations();
+                    log(`✅ Total donations: ${totalDonations.toString()}`);
+                    
+                    log('Contract connection successful!');
+                } catch (error) {
+                    log(`❌ Contract interaction failed: ${error.message}`, true);
+                }
+            } catch (error) {
+                log(`❌ Error setting up contract: ${error.message}`, true);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -21,5 +21,9 @@
     "chai-ethers": "^0.0.1",
     "ethers": "^6.10.0",
     "hardhat": "^2.19.5"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "open": "^10.2.0"
   }
 }

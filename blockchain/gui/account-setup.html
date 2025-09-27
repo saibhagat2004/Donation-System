@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Connection Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input {
+            padding: 8px;
+            width: 100%;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+        #log {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 150px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .section {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        h2 {
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .account-info {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .hint {
+            color: #666;
+            font-size: 0.8em;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Account Connection Tool</h1>
+    <p>This tool helps you connect your funded account to the smart contract</p>
+    
+    <div class="section">
+        <h2>1. Connect to Ganache</h2>
+        <button onclick="connectToGanache()">Connect to Ganache</button>
+        <div id="connection-status"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Set Contract Address</h2>
+        <input type="text" id="contract-address" placeholder="Enter contract address" value="0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab">
+        <button onclick="setContractAddress()">Set Contract Address</button>
+    </div>
+    
+    <div class="section">
+        <h2>3. Your Account</h2>
+        <input type="text" id="account-address" placeholder="Your account address" value="0x35b6cdc6F2a0990d38d232eEe6007846B531d5a0">
+        <button onclick="checkAccount()">Check Account Balance</button>
+        <div class="account-info" id="account-info">No account information yet</div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Create NGO</h2>
+        <input type="text" id="ngo-id" placeholder="NGO ID (e.g. NGO1)" value="NGO1">
+        <div class="hint">Use text format like "NGO-123" or "RED-CROSS" - avoid using only numbers</div>
+        <input type="number" id="initial-balance" placeholder="Initial balance (e.g. 10000)" value="10000">
+        <button onclick="createInitialNgo()">Create NGO</button>
+    </div>
+    
+    <div class="section">
+        <h2>5. Record Donation</h2>
+        <input type="text" id="donation-ngo-id" placeholder="NGO ID" value="NGO1">
+        <div class="hint">Must match exactly the NGO ID you created above</div>
+        <input type="text" id="donation-donor-id" placeholder="Donor ID" value="DONOR1">
+        <input type="text" id="donation-cause" placeholder="Cause" value="Education">
+        <input type="number" id="donation-amount" placeholder="Amount" value="1000">
+        <button onclick="recordDonation()">Record Donation</button>
+    </div>
+    
+    <div class="section">
+        <h2>6. Check NGO Data</h2>
+        <input type="text" id="check-ngo-id" placeholder="NGO ID" value="NGO1">
+        <div class="hint">Must match exactly the NGO ID you created above</div>
+        <button onclick="checkNgo()">Check NGO</button>
+    </div>
+    
+    <div class="section">
+        <h2>7. Test Contract Connection</h2>
+        <button onclick="testContractConnection()">Test Contract Connection</button>
+    </div>
+    
+    <div class="section">
+        <h2>8. Go to Main Interface</h2>
+        <button onclick="goToMainInterface()">Go to Main Interface</button>
+    </div>
+    
+    <h2>Log</h2>
+    <div id="log">Waiting for actions...</div>
+    
+    <script src="https://unpkg.com/ethers@6.10.0/dist/ethers.umd.js"></script>
+    <script src="contract-abi.js"></script>
+    <script>
+        // Global variables
+        let provider;
+        let contract;
+        let signer;
+        
+        // DOM elements
+        const log = document.getElementById('log');
+        const connectionStatus = document.getElementById('connection-status');
+        const accountInfo = document.getElementById('account-info');
+        
+        // Helper functions
+        function logMessage(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${timestamp}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+            console.log(`[${type}] ${message}`);
+        }
+        
+        // Connect to Ganache
+        async function connectToGanache() {
+            try {
+                logMessage('Connecting to Ganache...', 'info');
+                provider = new ethers.JsonRpcProvider('http://127.0.0.1:7545');
+                
+                // Test connection
+                const blockNumber = await provider.getBlockNumber();
+                connectionStatus.innerHTML = `<span style="color:green">✅ Connected to Ganache. Current block: ${blockNumber}</span>`;
+                logMessage(`Connected successfully. Block number: ${blockNumber}`, 'success');
+                
+                // Save connection details to localStorage
+                localStorage.setItem('ganacheConnected', 'true');
+            } catch (error) {
+                connectionStatus.innerHTML = `<span style="color:red">❌ Connection failed: ${error.message}</span>`;
+                logMessage(`Connection error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Set contract address
+        function setContractAddress() {
+            try {
+                const address = document.getElementById('contract-address').value;
+                
+                if (!address || !address.startsWith('0x')) {
+                    throw new Error('Invalid contract address');
+                }
+                
+                localStorage.setItem('donationContractAddress', address);
+                logMessage(`Contract address set: ${address}`, 'success');
+            } catch (error) {
+                logMessage(`Error setting contract address: ${error.message}`, 'error');
+            }
+        }
+        
+        // Check account balance
+        async function checkAccount() {
+            try {
+                if (!provider) {
+                    throw new Error('Please connect to Ganache first');
+                }
+                
+                const accountAddress = document.getElementById('account-address').value;
+                
+                if (!accountAddress || !accountAddress.startsWith('0x')) {
+                    throw new Error('Invalid account address');
+                }
+                
+                // Get balance
+                const balance = await provider.getBalance(accountAddress);
+                const balanceEth = ethers.formatEther(balance);
+                
+                accountInfo.innerHTML = `
+                    <strong>Account:</strong> ${accountAddress}<br>
+                    <strong>Balance:</strong> ${balanceEth} ETH<br>
+                `;
+                
+                logMessage(`Account balance checked: ${balanceEth} ETH`, 'success');
+                
+                // Initialize signer - important: we need to create a signer differently with newer ethers versions
+                try {
+                    // Try to create a signer using the account directly
+                    signer = await provider.getSigner(accountAddress);
+                    logMessage('Signer initialized with account from provider', 'success');
+                } catch (error) {
+                    // Fall back to manually creating a wallet
+                    logMessage(`Could not get signer from provider: ${error.message}`, 'info');
+                    logMessage('Creating a wallet instance instead...', 'info');
+                    
+                    // For Ganache, we'll use the default private key for the first account
+                    // This is the private key for account 0 in Ganache's deterministic mode
+                    const privateKey = '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d';
+                    signer = new ethers.Wallet(privateKey, provider);
+                    
+                    if ((await signer.getAddress()).toLowerCase() !== accountAddress.toLowerCase()) {
+                        logMessage('WARNING: Created wallet address does not match requested account address', 'error');
+                        logMessage(`Wallet address: ${await signer.getAddress()}`, 'info');
+                        logMessage(`Requested address: ${accountAddress}`, 'info');
+                    } else {
+                        logMessage('Wallet created successfully with matching address', 'success');
+                    }
+                }
+                
+                // Initialize contract
+                initializeContract();
+            } catch (error) {
+                logMessage(`Error checking account: ${error.message}`, 'error');
+                accountInfo.innerHTML = `<span style="color:red">Error: ${error.message}</span>`;
+            }
+        }
+        
+        // Initialize contract
+        function initializeContract() {
+            try {
+                const address = localStorage.getItem('donationContractAddress');
+                
+                if (!address) {
+                    throw new Error('Contract address not set');
+                }
+                
+                if (!signer) {
+                    throw new Error('No account selected');
+                }
+                
+                // Initialize with both provider (for read operations) and signer (for write operations)
+                contract = new ethers.Contract(address, CONTRACT_ABI, provider);
+                
+                // Connect with signer for transaction operations
+                contract = contract.connect(signer);
+                
+                logMessage('Contract initialized successfully', 'success');
+            } catch (error) {
+                logMessage(`Error initializing contract: ${error.message}`, 'error');
+            }
+        }
+        
+        // Create initial NGO
+        async function createInitialNgo() {
+            if (!contract) {
+                logMessage('Please connect to Ganache, set contract address, and check your account first', 'error');
+                return;
+            }
+            
+            try {
+                const ngoId = document.getElementById('ngo-id').value;
+                const initialBalance = parseInt(document.getElementById('initial-balance').value);
+                
+                if (!ngoId) {
+                    throw new Error('NGO ID is required');
+                }
+                
+                // Validate NGO ID format - must be a string
+                if (!isNaN(ngoId) && ngoId.trim() === ngoId) {
+                    logMessage('Warning: NGO ID should be a string identifier. Consider using a prefix like "NGO-"', 'info');
+                }
+                
+                if (isNaN(initialBalance) || initialBalance < 0) {
+                    throw new Error('Initial balance must be a positive number');
+                }
+                
+                logMessage(`Creating NGO ${ngoId} with initial balance ${initialBalance}...`, 'info');
+                
+                // Record initial balance with current timestamp
+                const timestamp = Math.floor(Date.now() / 1000);
+                
+                // Set gas limit explicitly
+                const options = {
+                    gasLimit: 500000
+                };
+                
+                const tx = await contract.recordInitialBalance(ngoId, initialBalance, timestamp, options);
+                logMessage(`Transaction submitted: ${tx.hash}`, 'info');
+                
+                const receipt = await tx.wait();
+                logMessage(`NGO created successfully! Transaction mined in block ${receipt.blockNumber}`, 'success');
+            } catch (error) {
+                logMessage(`Error creating NGO: ${error.message}`, 'error');
+            }
+        }
+        
+        // Record donation
+        async function recordDonation() {
+            if (!contract) {
+                logMessage('Please connect to Ganache, set contract address, and check your account first', 'error');
+                return;
+            }
+            
+            try {
+                const ngoId = document.getElementById('donation-ngo-id').value;
+                const donorId = document.getElementById('donation-donor-id').value;
+                const cause = document.getElementById('donation-cause').value;
+                const amount = parseInt(document.getElementById('donation-amount').value);
+                
+                if (!ngoId || !donorId || !cause) {
+                    throw new Error('All fields are required');
+                }
+                
+                // Validate NGO ID format - must be a string
+                if (!isNaN(ngoId) && ngoId.trim() === ngoId) {
+                    logMessage('Warning: NGO ID should be a string identifier. Consider using a prefix like "NGO-"', 'info');
+                }
+                
+                if (isNaN(amount) || amount <= 0) {
+                    throw new Error('Amount must be a positive number');
+                }
+                
+                logMessage(`Recording donation of ${amount} to ${ngoId}...`, 'info');
+                
+                // Get current timestamp
+                const timestamp = Math.floor(Date.now() / 1000);
+                
+                // Set gas limit explicitly
+                const options = {
+                    gasLimit: 500000
+                };
+                
+                const tx = await contract.recordDonation(ngoId, donorId, cause, amount, timestamp, options);
+                logMessage(`Transaction submitted: ${tx.hash}`, 'info');
+                
+                const receipt = await tx.wait();
+                logMessage(`Donation recorded successfully! Transaction mined in block ${receipt.blockNumber}`, 'success');
+            } catch (error) {
+                logMessage(`Error recording donation: ${error.message}`, 'error');
+            }
+        }
+        
+        // Check NGO data
+        async function checkNgo() {
+            if (!contract) {
+                logMessage('Please connect to Ganache, set contract address, and check your account first', 'error');
+                return;
+            }
+            
+            try {
+                const ngoId = document.getElementById('check-ngo-id').value;
+                
+                if (!ngoId) {
+                    throw new Error('NGO ID is required');
+                }
+                
+                // Validate NGO ID format - must be a string
+                if (!isNaN(ngoId) && ngoId.trim() === ngoId) {
+                    logMessage('Warning: NGO ID should be a string identifier. Using it as provided', 'info');
+                }
+                
+                logMessage(`Checking data for NGO ${ngoId}...`, 'info');
+                
+                // Check for donations first to avoid balance errors
+                try {
+                    const donationCount = await contract.getIncomingDonationsCount();
+                    logMessage(`Total donations in system: ${donationCount}`, 'info');
+                    
+                    // See if we can get active NGOs
+                    if (donationCount > 0) {
+                        try {
+                            const activeNgos = await contract.getActiveNgoIds(100);
+                            logMessage(`System has these NGOs: ${activeNgos.join(', ')}`, 'info');
+                            
+                            // Check if our NGO is in the list
+                            const ngoFound = activeNgos.some(id => id === ngoId);
+                            if (!ngoFound) {
+                                logMessage(`WARNING: NGO "${ngoId}" not found in active NGOs list`, 'error');
+                            } else {
+                                logMessage(`NGO "${ngoId}" found in active NGOs list`, 'success');
+                            }
+                        } catch (e) {
+                            logMessage(`Could not get active NGOs: ${e.message}`, 'error');
+                        }
+                    }
+                } catch (e) {
+                    logMessage(`Could not check donation count: ${e.message}`, 'error');
+                }
+                
+                // Try a direct call through provider to check NGO balance - more reliable
+                try {
+                    // Encode function call to getNgoBalance(string)
+                    const contractAddress = localStorage.getItem('donationContractAddress');
+                    const balanceFunctionSignature = 'getNgoBalance(string)';
+                    const balanceAbi = ['function getNgoBalance(string memory ngoId) view returns (uint256)'];
+                    const balanceInterface = new ethers.Interface(balanceAbi);
+                    
+                    const encodedData = balanceInterface.encodeFunctionData('getNgoBalance', [ngoId]);
+                    
+                    // Make the call through provider directly
+                    const rawResult = await provider.call({
+                        to: contractAddress,
+                        data: encodedData
+                    });
+                    
+                    // Decode the result
+                    const decodedResult = balanceInterface.decodeFunctionResult('getNgoBalance', rawResult);
+                    
+                    logMessage(`NGO Balance (direct call): ${decodedResult[0].toString()}`, 'success');
+                    
+                    // If we got here, we can try the summary function
+                    try {
+                        // Try to get the NGO summary using direct call
+                        const summaryAbi = ['function getNgoSummary(string memory ngoId) view returns (uint256, uint256, uint256, uint256, uint256)'];
+                        const summaryInterface = new ethers.Interface(summaryAbi);
+                        
+                        const encodedSummaryCall = summaryInterface.encodeFunctionData('getNgoSummary', [ngoId]);
+                        
+                        const rawSummaryResult = await provider.call({
+                            to: contractAddress,
+                            data: encodedSummaryCall
+                        });
+                        
+                        const decodedSummary = summaryInterface.decodeFunctionResult('getNgoSummary', rawSummaryResult);
+                        
+                        logMessage(`=== NGO ${ngoId} Summary ===`, 'info');
+                        logMessage(`Total Received: ${decodedSummary[0].toString()}`, 'info');
+                        logMessage(`Total Spent: ${decodedSummary[1].toString()}`, 'info');
+                        logMessage(`Incoming Transactions: ${decodedSummary[2].toString()}`, 'info');
+                        logMessage(`Outgoing Transactions: ${decodedSummary[3].toString()}`, 'info');
+                        logMessage(`Current Balance: ${decodedSummary[4].toString()}`, 'info');
+                    } catch (summaryError) {
+                        logMessage(`Could not retrieve detailed summary: ${summaryError.message}`, 'error');
+                    }
+                    
+                } catch (directCallError) {
+                    logMessage(`Direct call failed: ${directCallError.message}`, 'error');
+                    
+                    // Last resort - try the contract methods with options
+                    try {
+                        const options = { gasLimit: 1000000 };
+                        const balance = await contract.getNgoBalance(ngoId, options);
+                        logMessage(`NGO ${ngoId} balance through contract: ${balance.toString()}`, 'success');
+                    } catch (fallbackError) {
+                        logMessage(`All methods to get NGO data failed. This NGO likely doesn't exist yet.`, 'error');
+                    }
+                }
+                
+            } catch (error) {
+                logMessage(`Error checking NGO data: ${error.message}`, 'error');
+                
+                // Provide more guidance
+                logMessage('Make sure your contract address is correct and that you have created this NGO', 'info');
+                logMessage('Try creating a new NGO with this ID using the "Create NGO" section above', 'info');
+            }
+        }
+        
+        // Test contract connection
+        async function testContractConnection() {
+            if (!contract) {
+                logMessage('Please connect to Ganache, set contract address, and check your account first', 'error');
+                return;
+            }
+            
+            try {
+                const contractAddress = localStorage.getItem('donationContractAddress');
+                logMessage(`Testing contract connection to address: ${contractAddress}...`, 'info');
+                
+                // Display information about our connection
+                logMessage(`Using account: ${await signer.getAddress()}`, 'info');
+                
+                // Try to directly check the contract's bytecode to verify it exists
+                const contractCode = await provider.getCode(contractAddress);
+                if (contractCode === '0x') {
+                    logMessage('WARNING: No contract found at this address! Contract bytecode is empty.', 'error');
+                    logMessage('Please check your contract address and make sure it was deployed correctly.', 'info');
+                    return;
+                }
+                
+                logMessage('Contract exists at the specified address', 'success');
+                
+                // Test basic contract functions
+                try {
+                    const owner = await contract.owner();
+                    logMessage(`Contract owner address: ${owner}`, 'info');
+                } catch (error) {
+                    logMessage(`Failed to get owner: ${error.message}`, 'error');
+                }
+                
+                try {
+                    const totalDonations = await contract.totalDonations();
+                    logMessage(`Total donations in contract: ${totalDonations}`, 'info');
+                } catch (error) {
+                    logMessage(`Failed to get totalDonations: ${error.message}`, 'error');
+                }
+                
+                try {
+                    const donationsCount = await contract.getIncomingDonationsCount();
+                    logMessage(`Number of donation records: ${donationsCount}`, 'info');
+                    
+                    if (donationsCount > 0) {
+                        // Try to get active NGOs
+                        try {
+                            const activeNgos = await contract.getActiveNgoIds(100);
+                            logMessage(`Active NGOs found: ${activeNgos.length > 0 ? activeNgos.join(', ') : 'None'}`, 'info');
+                        } catch (error) {
+                            logMessage(`Could not get active NGOs: ${error.message}`, 'error');
+                        }
+                    }
+                } catch (error) {
+                    logMessage(`Failed to get donation count: ${error.message}`, 'error');
+                }
+                
+                logMessage('Contract connection test completed', 'success');
+            } catch (error) {
+                logMessage(`Contract connection test failed: ${error.message}`, 'error');
+                logMessage('Please check that your contract address is correct and the contract is deployed', 'info');
+            }
+        }
+        
+        // Go to main interface
+        function goToMainInterface() {
+            window.location.href = '/';
+        }
+        
+        // Load saved data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedAddress = localStorage.getItem('donationContractAddress');
+            if (savedAddress) {
+                document.getElementById('contract-address').value = savedAddress;
+                logMessage(`Loaded saved contract address: ${savedAddress}`, 'info');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ganache Connection Tester</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .card {
+      border: 1px solid #ddd;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    #results {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      min-height: 200px;
+      margin-top: 20px;
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
+    input {
+      padding: 8px;
+      width: 500px;
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ganache Connection Tester</h1>
+  <p>Use this tool to test your connection to Ganache and verify contract interactions.</p>
+  
+  <div class="card">
+    <h2>Connection Settings</h2>
+    <div>
+      <label>Ganache URL:</label>
+      <input type="text" id="ganache-url" value="http://127.0.0.1:7545">
+    </div>
+    <div>
+      <label>Contract Address:</label>
+      <input type="text" id="contract-address" placeholder="Enter your contract address">
+    </div>
+    <button id="test-connection">Test Connection</button>
+    <button id="get-accounts">Get Accounts</button>
+  </div>
+  
+  <div class="card">
+    <h2>Contract Tests</h2>
+    <button id="test-owner">Get Owner</button>
+    <button id="test-donations">Get Total Donations</button>
+    <button id="test-ngo">Test NGO Summary</button>
+    <div>
+      <label>NGO ID for testing:</label>
+      <input type="text" id="ngo-id" value="NGO1">
+    </div>
+  </div>
+  
+  <h2>Results</h2>
+  <div id="results">Results will appear here...</div>
+
+  <script src="https://unpkg.com/ethers@6.10.0/dist/ethers.umd.js"></script>
+  <script src="contract-abi.js"></script>
+  <script>
+    // DOM elements
+    const resultsEl = document.getElementById('results');
+    const ganacheUrlEl = document.getElementById('ganache-url');
+    const contractAddressEl = document.getElementById('contract-address');
+    const ngoIdEl = document.getElementById('ngo-id');
+    
+    // Global variables
+    let provider;
+    let signer;
+    let contract;
+    
+    // Load saved contract address
+    if (localStorage.getItem('donationContractAddress')) {
+      contractAddressEl.value = localStorage.getItem('donationContractAddress');
+    }
+    
+    // Utility function to log results
+    function log(message, isError = false) {
+      console.log(message);
+      if (isError) {
+        resultsEl.innerHTML += `<span style="color: red">${message}</span>\n`;
+      } else {
+        resultsEl.innerHTML += `${message}\n`;
+      }
+    }
+    
+    // Clear results
+    function clearResults() {
+      resultsEl.innerHTML = '';
+    }
+    
+    // Test connection to Ganache
+    async function testConnection() {
+      clearResults();
+      try {
+        log('Testing connection to Ganache...');
+        const url = ganacheUrlEl.value;
+        
+        // Create provider
+        provider = new ethers.JsonRpcProvider(url);
+        
+        // Test connection
+        const blockNumber = await provider.getBlockNumber();
+        log(`✅ Connected successfully to Ganache at ${url}`);
+        log(`Current block number: ${blockNumber}`);
+        
+        return true;
+      } catch (error) {
+        log(`❌ Connection failed: ${error.message}`, true);
+        return false;
+      }
+    }
+    
+    // Get accounts from Ganache
+    async function getAccounts() {
+      clearResults();
+      if (!provider && !await testConnection()) return;
+      
+      try {
+        log('Getting accounts from Ganache...');
+        
+        // Try to get accounts
+        let accounts;
+        try {
+          accounts = await provider.listAccounts();
+        } catch (e) {
+          log('listAccounts() failed, trying alternative approach...', true);
+          // For ethers v6
+          const count = 10;
+          accounts = [];
+          for (let i = 0; i < count; i++) {
+            try {
+              const account = await provider.getSigner(i);
+              accounts.push(await account.getAddress());
+            } catch (e) {
+              break;
+            }
+          }
+        }
+        
+        // Display accounts
+        log(`Found ${accounts.length} accounts:`);
+        for (let i = 0; i < accounts.length; i++) {
+          const balance = await provider.getBalance(accounts[i]);
+          log(`Account ${i}: ${accounts[i]} - Balance: ${ethers.formatEther(balance)} ETH`);
+        }
+        
+        // Store first account in signer
+        signer = await provider.getSigner(accounts[0]);
+        log(`\nSelected account: ${await signer.getAddress()}`);
+      } catch (error) {
+        log(`❌ Error getting accounts: ${error.message}`, true);
+      }
+    }
+    
+    // Test contract owner
+    async function testOwner() {
+      clearResults();
+      if (!await initializeContract()) return;
+      
+      try {
+        log('Getting contract owner...');
+        const owner = await contract.owner();
+        log(`✅ Contract owner: ${owner}`);
+      } catch (error) {
+        log(`❌ Error getting owner: ${error.message}`, true);
+      }
+    }
+    
+    // Test total donations
+    async function testDonations() {
+      clearResults();
+      if (!await initializeContract()) return;
+      
+      try {
+        log('Getting total donations...');
+        const totalDonations = await contract.totalDonations();
+        log(`✅ Total donations: ${totalDonations.toString()}`);
+      } catch (error) {
+        log(`❌ Error getting total donations: ${error.message}`, true);
+      }
+    }
+    
+    // Test NGO summary
+    async function testNgoSummary() {
+      clearResults();
+      if (!await initializeContract()) return;
+      
+      try {
+        const ngoId = ngoIdEl.value;
+        log(`Getting summary for NGO ID: ${ngoId}...`);
+        
+        const summary = await contract.getNgoSummary(ngoId);
+        log(`✅ NGO Summary for ${ngoId}:`);
+        log(`Total received: ${summary[0].toString()}`);
+        log(`Total spent: ${summary[1].toString()}`);
+        log(`Incoming count: ${summary[2].toString()}`);
+        log(`Outgoing count: ${summary[3].toString()}`);
+        log(`Current balance: ${summary[4].toString()}`);
+      } catch (error) {
+        log(`❌ Error getting NGO summary: ${error.message}`, true);
+      }
+    }
+    
+    // Initialize contract
+    async function initializeContract() {
+      if (!provider && !await testConnection()) return false;
+      if (!signer) {
+        try {
+          const accounts = await provider.listAccounts();
+          signer = await provider.getSigner(accounts[0]);
+        } catch (e) {
+          signer = await provider.getSigner();
+        }
+      }
+      
+      try {
+        const address = contractAddressEl.value;
+        if (!address) {
+          log('❌ Contract address not provided', true);
+          return false;
+        }
+        
+        log(`Initializing contract at ${address}...`);
+        contract = new ethers.Contract(address, CONTRACT_ABI, signer);
+        
+        // Save address
+        localStorage.setItem('donationContractAddress', address);
+        
+        log('✅ Contract initialized successfully');
+        return true;
+      } catch (error) {
+        log(`❌ Error initializing contract: ${error.message}`, true);
+        return false;
+      }
+    }
+    
+    // Event listeners
+    document.getElementById('test-connection').addEventListener('click', testConnection);
+    document.getElementById('get-accounts').addEventListener('click', getAccounts);
+    document.getElementById('test-owner').addEventListener('click', testOwner);
+    document.getElementById('test-donations').addEventListener('click', testDonations);
+    document.getElementById('test-ngo').addEventListener('click', testNgoSummary);
+  </script>
+</body>
+</html>

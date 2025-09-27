@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Connection Tester</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .test-section {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .test-button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        .test-button:hover {
+            background-color: #45a049;
+        }
+        
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .success {
+            background-color: #dff2bf;
+            color: #4F8A10;
+        }
+        
+        .error {
+            background-color: #ffbaba;
+            color: #D8000C;
+        }
+        
+        .info {
+            background-color: #bde5f8;
+            color: #00529B;
+        }
+        
+        #accounts-list {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        pre {
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .log-section {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+
+        input[type="text"] {
+            padding: 8px;
+            width: 400px;
+        }
+        
+        .network-info {
+            margin-top: 20px;
+            background-color: #e8f5e9;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f2f2f2;
+        }
+        
+        .steps {
+            counter-reset: step;
+        }
+        
+        .steps li {
+            margin-bottom: 10px;
+            position: relative;
+            padding-left: 30px;
+        }
+        
+        .steps li:before {
+            content: counter(step);
+            counter-increment: step;
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: #4CAF50;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Ganache Connection Tester</h1>
+    <p>This tool helps diagnose connection issues with Ganache and your Donation contract.</p>
+    
+    <div class="test-section">
+        <h2>Troubleshooting Steps</h2>
+        <ol class="steps">
+            <li>Make sure Ganache is running on port 7545 with <code>ganache --port 7545 --deterministic</code></li>
+            <li>Check that your contract is deployed with <code>npx hardhat run --network ganache scripts/deploy-to-ganache-fixed.js</code></li>
+            <li>Verify the contract address is correct in the input field below</li>
+            <li>Try using both "localhost" and "127.0.0.1" in the connection tests</li>
+            <li>Check your network to ensure port 7545 is not blocked</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>1. Contract Address</h2>
+        <label for="contract-address">Contract Address:</label>
+        <input type="text" id="contract-address" placeholder="Enter your contract address" value="0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab">
+        <button onclick="saveContractAddress()" class="test-button">Save Address</button>
+        <div id="save-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Basic Ganache Connection</h2>
+        <p>Tests if we can connect to Ganache RPC server</p>
+        <button onclick="testConnection('localhost')" class="test-button">Test Connection (localhost)</button>
+        <button onclick="testConnection('127.0.0.1')" class="test-button">Test Connection (127.0.0.1)</button>
+        <div id="connection-status" class="status"></div>
+        
+        <div class="network-info">
+            <h3>Network Diagnostics</h3>
+            <button onclick="checkNetwork()" class="test-button">Check Network</button>
+            <div id="network-status"></div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Account Access</h2>
+        <p>Tests if we can access accounts on Ganache</p>
+        <button onclick="getAccounts('localhost')" class="test-button">Get Accounts (localhost)</button>
+        <button onclick="getAccounts('127.0.0.1')" class="test-button">Get Accounts (127.0.0.1)</button>
+        <div id="accounts-status" class="status"></div>
+        <div id="accounts-list"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. Contract Interaction</h2>
+        <p>Tests if we can interact with your Donation contract</p>
+        <button onclick="testOwner('localhost')" class="test-button">Test Owner (localhost)</button>
+        <button onclick="testOwner('127.0.0.1')" class="test-button">Test Owner (127.0.0.1)</button>
+        <div id="contract-status" class="status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>5. Return to Main Interface</h2>
+        <p>Once all tests pass, you can return to the main interface:</p>
+        <a href="/" class="test-button" style="display: inline-block; text-decoration: none;">Go to Main Interface</a>
+    </div>
+
+    <div class="log-section">
+        <h2>Debug Log</h2>
+        <pre id="debug-log"></pre>
+        <button onclick="clearLog()" class="test-button">Clear Log</button>
+    </div>
+
+    <script src="https://unpkg.com/ethers@6.10.0/dist/ethers.umd.js"></script>
+    <script src="contract-abi.js"></script>
+    <script>
+        // Load contract address from localStorage if available
+        window.onload = function() {
+            const savedAddress = localStorage.getItem('donationContractAddress');
+            if (savedAddress) {
+                document.getElementById('contract-address').value = savedAddress;
+                log(`Loaded saved contract address: ${savedAddress}`);
+            }
+        };
+
+        // Save contract address to localStorage
+        function saveContractAddress() {
+            const address = document.getElementById('contract-address').value;
+            if (address && address.startsWith('0x') && address.length === 42) {
+                localStorage.setItem('donationContractAddress', address);
+                document.getElementById('save-status').innerHTML = '<p class="success">Address saved successfully!</p>';
+                log(`Saved contract address: ${address}`);
+            } else {
+                document.getElementById('save-status').innerHTML = '<p class="error">Please enter a valid Ethereum address</p>';
+                log('Invalid address format');
+            }
+        }
+
+        function log(message) {
+            const logElement = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('debug-log').textContent = '';
+        }
+
+        // Check network connectivity
+        function checkNetwork() {
+            const networkStatus = document.getElementById('network-status');
+            networkStatus.innerHTML = '<p class="info">Checking network...</p>';
+            
+            log('Checking network connectivity...');
+            
+            fetch('/api/test-connection')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        networkStatus.innerHTML = '<p class="success">✅ API server is working correctly</p>';
+                        log('API server connection successful');
+                    } else {
+                        networkStatus.innerHTML = '<p class="error">❌ API server response invalid</p>';
+                        log('API server returned invalid response');
+                    }
+                })
+                .catch(error => {
+                    networkStatus.innerHTML = `<p class="error">❌ Could not connect to API server: ${error.message}</p>`;
+                    log(`API server connection error: ${error.message}`);
+                });
+        }
+
+        async function testConnection(host) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.innerHTML = '<p class="info">Testing connection...</p>';
+            log(`Testing connection to ${host}:7545...`);
+            
+            try {
+                const provider = new ethers.JsonRpcProvider(`http://${host}:7545`);
+                const blockNumber = await provider.getBlockNumber();
+                
+                statusElement.innerHTML = `<p class="success">✅ Successfully connected to Ganache! Current block: ${blockNumber}</p>`;
+                log(`Connection successful. Block number: ${blockNumber}`);
+                return provider;
+            } catch (error) {
+                statusElement.innerHTML = `<p class="error">❌ Failed to connect to Ganache: ${error.message}</p>`;
+                log(`Connection error: ${error.message}`);
+                console.error(error);
+                return null;
+            }
+        }
+        
+        async function getAccounts(host) {
+            const statusElement = document.getElementById('accounts-status');
+            const listElement = document.getElementById('accounts-list');
+            
+            statusElement.innerHTML = '<p class="info">Fetching accounts...</p>';
+            listElement.innerHTML = '';
+            log(`Fetching accounts from ${host}:7545...`);
+            
+            try {
+                const provider = await testConnection(host);
+                if (!provider) {
+                    statusElement.innerHTML = '<p class="error">❌ Cannot fetch accounts without connection</p>';
+                    return;
+                }
+                
+                let accounts;
+                
+                try {
+                    // First try the accounts method
+                    accounts = await provider.listAccounts();
+                } catch (error) {
+                    log('listAccounts failed, trying alternative approach...');
+                    // Try an alternative approach for ethers v6
+                    try {
+                        // Get first 10 accounts manually
+                        accounts = [];
+                        for (let i = 0; i < 10; i++) {
+                            try {
+                                const signer = await provider.getSigner(i);
+                                accounts.push({
+                                    address: await signer.getAddress()
+                                });
+                            } catch (e) {
+                                // Stop if we can't get any more accounts
+                                break;
+                            }
+                        }
+                    } catch (e) {
+                        throw new Error('Could not retrieve accounts: ' + e.message);
+                    }
+                }
+                
+                if (accounts && accounts.length > 0) {
+                    statusElement.innerHTML = `<p class="success">✅ Successfully retrieved ${accounts.length} accounts</p>`;
+                    
+                    let accountsHTML = '<table><tr><th>Account</th><th>Balance (ETH)</th></tr>';
+                    for (let i = 0; i < accounts.length; i++) {
+                        const balance = await provider.getBalance(accounts[i].address);
+                        const etherBalance = ethers.formatEther(balance);
+                        accountsHTML += `<tr><td>${accounts[i].address}</td><td>${etherBalance}</td></tr>`;
+                    }
+                    accountsHTML += '</table>';
+                    
+                    listElement.innerHTML = accountsHTML;
+                    log(`Retrieved ${accounts.length} accounts successfully`);
+                } else {
+                    statusElement.innerHTML = '<p class="error">❌ No accounts found or accounts not accessible</p>';
+                    log('No accounts found');
+                }
+            } catch (error) {
+                statusElement.innerHTML = `<p class="error">❌ Error fetching accounts: ${error.message}</p>`;
+                log(`Account fetch error: ${error.message}`);
+                console.error(error);
+            }
+        }
+        
+        async function testOwner(host) {
+            const statusElement = document.getElementById('contract-status');
+            const contractAddress = document.getElementById('contract-address').value;
+            
+            if (!contractAddress) {
+                statusElement.innerHTML = '<p class="error">❌ Please enter a contract address first</p>';
+                log('Missing contract address');
+                return;
+            }
+            
+            statusElement.innerHTML = '<p class="info">Testing contract interaction...</p>';
+            log(`Testing contract at ${contractAddress} via ${host}:7545...`);
+            
+            try {
+                const provider = await testConnection(host);
+                if (!provider) {
+                    statusElement.innerHTML = '<p class="error">❌ Cannot interact with contract without connection</p>';
+                    return;
+                }
+
+                // Get signer
+                let signer;
+                try {
+                    const accounts = await provider.listAccounts();
+                    signer = await provider.getSigner(accounts[0]);
+                } catch (e) {
+                    log('Getting signer via listAccounts failed, trying alternative method...');
+                    signer = await provider.getSigner();
+                }
+                
+                // Initialize contract
+                const contract = new ethers.Contract(contractAddress, CONTRACT_ABI, signer);
+                
+                try {
+                    log('Attempting to call contract.owner()...');
+                    const owner = await contract.owner();
+                    const ngoCount = await contract.getActiveNgoIds(100).then(arr => arr.length);
+                    const donationCount = await contract.getIncomingDonationsCount();
+                    
+                    statusElement.innerHTML = `
+                        <p class="success">✅ Successfully connected to contract!</p>
+                        <table>
+                            <tr><th>Property</th><th>Value</th></tr>
+                            <tr><td>Contract Owner</td><td>${owner}</td></tr>
+                            <tr><td>Active NGO Count</td><td>${ngoCount}</td></tr>
+                            <tr><td>Total Donations</td><td>${donationCount.toString()}</td></tr>
+                        </table>
+                    `;
+                    log(`Contract connected successfully. Owner: ${owner}`);
+                } catch (contractError) {
+                    statusElement.innerHTML = `<p class="error">❌ Contract interaction failed: ${contractError.message}</p>`;
+                    log(`Contract error: ${contractError.message}`);
+                    console.error(contractError);
+                }
+            } catch (error) {
+                statusElement.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`Error: ${error.message}`);
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>
