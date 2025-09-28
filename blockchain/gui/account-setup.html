@@ -96,7 +96,7 @@
     
     <div class="section">
         <h2>4. Create NGO</h2>
-        <input type="text" id="ngo-id" placeholder="NGO ID (e.g. NGO1)" value="NGO1">
+        <input type="text" id="ngo-id" placeholder="NGO ID (e.g. NGO-123)" value="NGO-123">
         <div class="hint">Use text format like "NGO-123" or "RED-CROSS" - avoid using only numbers</div>
         <input type="number" id="initial-balance" placeholder="Initial balance (e.g. 10000)" value="10000">
         <button onclick="createInitialNgo()">Create NGO</button>
@@ -104,7 +104,7 @@
     
     <div class="section">
         <h2>5. Record Donation</h2>
-        <input type="text" id="donation-ngo-id" placeholder="NGO ID" value="NGO1">
+        <input type="text" id="donation-ngo-id" placeholder="NGO ID" value="NGO-123">
         <div class="hint">Must match exactly the NGO ID you created above</div>
         <input type="text" id="donation-donor-id" placeholder="Donor ID" value="DONOR1">
         <input type="text" id="donation-cause" placeholder="Cause" value="Education">
@@ -114,7 +114,7 @@
     
     <div class="section">
         <h2>6. Check NGO Data</h2>
-        <input type="text" id="check-ngo-id" placeholder="NGO ID" value="NGO1">
+        <input type="text" id="check-ngo-id" placeholder="NGO ID" value="NGO-123">
         <div class="hint">Must match exactly the NGO ID you created above</div>
         <button onclick="checkNgo()">Check NGO</button>
     </div>
@@ -215,27 +215,45 @@
                 
                 logMessage(`Account balance checked: ${balanceEth} ETH`, 'success');
                 
-                // Initialize signer - important: we need to create a signer differently with newer ethers versions
+                // Initialize signer with the contract owner's account
                 try {
-                    // Try to create a signer using the account directly
-                    signer = await provider.getSigner(accountAddress);
-                    logMessage('Signer initialized with account from provider', 'success');
-                } catch (error) {
-                    // Fall back to manually creating a wallet
-                    logMessage(`Could not get signer from provider: ${error.message}`, 'info');
-                    logMessage('Creating a wallet instance instead...', 'info');
-                    
-                    // For Ganache, we'll use the default private key for the first account
-                    // This is the private key for account 0 in Ganache's deterministic mode
-                    const privateKey = '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d';
+                    // Create a wallet with the contract deployer's private key
+                    // This is your updated private key for the contract owner
+                    const privateKey = '0x69c3cf937091d5c71fe45ca0e738e5c54c96ddc233e8b61f0590a0081c6fd4f8';
                     signer = new ethers.Wallet(privateKey, provider);
                     
-                    if ((await signer.getAddress()).toLowerCase() !== accountAddress.toLowerCase()) {
-                        logMessage('WARNING: Created wallet address does not match requested account address', 'error');
-                        logMessage(`Wallet address: ${await signer.getAddress()}`, 'info');
-                        logMessage(`Requested address: ${accountAddress}`, 'info');
+                    const signerAddress = await signer.getAddress();
+                    
+                    if (signerAddress.toLowerCase() !== accountAddress.toLowerCase()) {
+                        logMessage('NOTE: The signer address is different from the entered account address', 'info');
+                        logMessage(`Signer address: ${signerAddress}`, 'info');
+                        logMessage(`Entered address: ${accountAddress}`, 'info');
+                        logMessage('Using the signer address as it has the contract owner permissions', 'info');
+                        
+                        // Update the displayed account address
+                        document.getElementById('account-address').value = signerAddress;
+                        
+                        // Update account info display
+                        const signerBalance = await provider.getBalance(signerAddress);
+                        const signerBalanceEth = ethers.formatEther(signerBalance);
+                        
+                        accountInfo.innerHTML = `
+                            <strong>Account (Contract Owner):</strong> ${signerAddress}<br>
+                            <strong>Balance:</strong> ${signerBalanceEth} ETH<br>
+                        `;
                     } else {
-                        logMessage('Wallet created successfully with matching address', 'success');
+                        logMessage('Signer initialized successfully with matching address', 'success');
+                    }
+                } catch (error) {
+                    logMessage(`Error initializing signer: ${error.message}`, 'error');
+                    
+                    // Fall back to using account from provider if possible
+                    try {
+                        signer = await provider.getSigner(accountAddress);
+                        logMessage('Fallback: Signer initialized with account from provider', 'success');
+                    } catch (fallbackError) {
+                        logMessage(`Critical: Could not initialize signer: ${fallbackError.message}`, 'error');
+                        return;
                     }
                 }
                 
@@ -280,7 +298,7 @@
             }
             
             try {
-                const ngoId = document.getElementById('ngo-id').value;
+                const ngoId = document.getElementById('ngo-id').value.trim();
                 const initialBalance = parseInt(document.getElementById('initial-balance').value);
                 
                 if (!ngoId) {
@@ -296,7 +314,7 @@
                     throw new Error('Initial balance must be a positive number');
                 }
                 
-                logMessage(`Creating NGO ${ngoId} with initial balance ${initialBalance}...`, 'info');
+                logMessage(`Creating NGO "${ngoId}" with initial balance ${initialBalance}...`, 'info');
                 
                 // Record initial balance with current timestamp
                 const timestamp = Math.floor(Date.now() / 1000);
@@ -306,13 +324,35 @@
                     gasLimit: 500000
                 };
                 
+                // Check if the signer is the contract owner
+                try {
+                    const owner = await contract.owner();
+                    const signerAddress = await signer.getAddress();
+                    
+                    if (owner.toLowerCase() !== signerAddress.toLowerCase()) {
+                        logMessage(`WARNING: Your account (${signerAddress}) is not the contract owner (${owner})`, 'error');
+                        logMessage(`Only the contract owner can create NGOs. Transaction may fail.`, 'error');
+                    }
+                } catch (ownerError) {
+                    logMessage(`Could not verify contract owner: ${ownerError.message}`, 'info');
+                }
+                
                 const tx = await contract.recordInitialBalance(ngoId, initialBalance, timestamp, options);
                 logMessage(`Transaction submitted: ${tx.hash}`, 'info');
                 
                 const receipt = await tx.wait();
                 logMessage(`NGO created successfully! Transaction mined in block ${receipt.blockNumber}`, 'success');
+                
+                // Update all the NGO ID fields to match this one
+                document.getElementById('donation-ngo-id').value = ngoId;
+                document.getElementById('check-ngo-id').value = ngoId;
+                logMessage(`All NGO ID fields updated to "${ngoId}"`, 'info');
             } catch (error) {
                 logMessage(`Error creating NGO: ${error.message}`, 'error');
+                
+                if (error.message.includes("Only owner")) {
+                    logMessage(`This operation requires the contract owner account. Make sure you're using the right account.`, 'info');
+                }
             }
         }
         
@@ -324,9 +364,9 @@
             }
             
             try {
-                const ngoId = document.getElementById('donation-ngo-id').value;
-                const donorId = document.getElementById('donation-donor-id').value;
-                const cause = document.getElementById('donation-cause').value;
+                const ngoId = document.getElementById('donation-ngo-id').value.trim();
+                const donorId = document.getElementById('donation-donor-id').value.trim();
+                const cause = document.getElementById('donation-cause').value.trim();
                 const amount = parseInt(document.getElementById('donation-amount').value);
                 
                 if (!ngoId || !donorId || !cause) {
@@ -342,7 +382,16 @@
                     throw new Error('Amount must be a positive number');
                 }
                 
-                logMessage(`Recording donation of ${amount} to ${ngoId}...`, 'info');
+                logMessage(`Recording donation of ${amount} to "${ngoId}"...`, 'info');
+                
+                // Check if this NGO exists first
+                try {
+                    const balance = await contract.getNgoBalance(ngoId);
+                    logMessage(`Found NGO "${ngoId}" with current balance: ${balance}`, 'info');
+                } catch (balanceError) {
+                    logMessage(`Warning: Could not verify if this NGO exists: ${balanceError.message}`, 'error');
+                    logMessage('Creating a donation for a non-existent NGO will create it automatically', 'info');
+                }
                 
                 // Get current timestamp
                 const timestamp = Math.floor(Date.now() / 1000);
@@ -357,6 +406,9 @@
                 
                 const receipt = await tx.wait();
                 logMessage(`Donation recorded successfully! Transaction mined in block ${receipt.blockNumber}`, 'success');
+                
+                // Update check NGO field to match this one
+                document.getElementById('check-ngo-id').value = ngoId;
             } catch (error) {
                 logMessage(`Error recording donation: ${error.message}`, 'error');
             }
@@ -394,10 +446,18 @@
                             const activeNgos = await contract.getActiveNgoIds(100);
                             logMessage(`System has these NGOs: ${activeNgos.join(', ')}`, 'info');
                             
-                            // Check if our NGO is in the list
-                            const ngoFound = activeNgos.some(id => id === ngoId);
+                            // Check if our NGO is in the list - using trimmed comparison
+                            const ngoFound = activeNgos.some(id => id.trim() === ngoId.trim());
                             if (!ngoFound) {
                                 logMessage(`WARNING: NGO "${ngoId}" not found in active NGOs list`, 'error');
+                                // Check if there's a case issue or extra quotes
+                                const possibleMatches = activeNgos.filter(id => 
+                                    id.toLowerCase() === ngoId.toLowerCase() || 
+                                    id.includes(ngoId) || 
+                                    ngoId.includes(id));
+                                if (possibleMatches.length > 0) {
+                                    logMessage(`Possible matches found: ${possibleMatches.join(', ')}`, 'info');
+                                }
                             } else {
                                 logMessage(`NGO "${ngoId}" found in active NGOs list`, 'success');
                             }
@@ -411,46 +471,68 @@
                 
                 // Try a direct call through provider to check NGO balance - more reliable
                 try {
-                    // Encode function call to getNgoBalance(string)
-                    const contractAddress = localStorage.getItem('donationContractAddress');
-                    const balanceFunctionSignature = 'getNgoBalance(string)';
-                    const balanceAbi = ['function getNgoBalance(string memory ngoId) view returns (uint256)'];
-                    const balanceInterface = new ethers.Interface(balanceAbi);
-                    
-                    const encodedData = balanceInterface.encodeFunctionData('getNgoBalance', [ngoId]);
-                    
-                    // Make the call through provider directly
-                    const rawResult = await provider.call({
-                        to: contractAddress,
-                        data: encodedData
-                    });
-                    
-                    // Decode the result
-                    const decodedResult = balanceInterface.decodeFunctionResult('getNgoBalance', rawResult);
-                    
-                    logMessage(`NGO Balance (direct call): ${decodedResult[0].toString()}`, 'success');
+                    // First try using the contract interface
+                    try {
+                        const balance = await contract.getNgoBalance(ngoId, { gasLimit: 500000 });
+                        logMessage(`NGO Balance (contract call): ${balance.toString()}`, 'success');
+                    } catch (contractCallError) {
+                        logMessage(`Contract call failed, trying direct call: ${contractCallError.message}`, 'info');
+                        
+                        // Fallback to direct provider call
+                        const contractAddress = localStorage.getItem('donationContractAddress');
+                        const balanceFunctionSignature = 'getNgoBalance(string)';
+                        const balanceAbi = ['function getNgoBalance(string memory ngoId) view returns (uint256)'];
+                        const balanceInterface = new ethers.Interface(balanceAbi);
+                        
+                        const encodedData = balanceInterface.encodeFunctionData('getNgoBalance', [ngoId]);
+                        
+                        // Make the call through provider directly
+                        const rawResult = await provider.call({
+                            to: contractAddress,
+                            data: encodedData
+                        });
+                        
+                        // Decode the result
+                        const decodedResult = balanceInterface.decodeFunctionResult('getNgoBalance', rawResult);
+                        
+                        logMessage(`NGO Balance (direct call): ${decodedResult[0].toString()}`, 'success');
+                    }
                     
                     // If we got here, we can try the summary function
                     try {
-                        // Try to get the NGO summary using direct call
-                        const summaryAbi = ['function getNgoSummary(string memory ngoId) view returns (uint256, uint256, uint256, uint256, uint256)'];
-                        const summaryInterface = new ethers.Interface(summaryAbi);
-                        
-                        const encodedSummaryCall = summaryInterface.encodeFunctionData('getNgoSummary', [ngoId]);
-                        
-                        const rawSummaryResult = await provider.call({
-                            to: contractAddress,
-                            data: encodedSummaryCall
-                        });
-                        
-                        const decodedSummary = summaryInterface.decodeFunctionResult('getNgoSummary', rawSummaryResult);
-                        
-                        logMessage(`=== NGO ${ngoId} Summary ===`, 'info');
-                        logMessage(`Total Received: ${decodedSummary[0].toString()}`, 'info');
-                        logMessage(`Total Spent: ${decodedSummary[1].toString()}`, 'info');
-                        logMessage(`Incoming Transactions: ${decodedSummary[2].toString()}`, 'info');
-                        logMessage(`Outgoing Transactions: ${decodedSummary[3].toString()}`, 'info');
-                        logMessage(`Current Balance: ${decodedSummary[4].toString()}`, 'info');
+                        // First try using the contract interface
+                        try {
+                            const summary = await contract.getNgoSummary(ngoId, { gasLimit: 500000 });
+                            
+                            logMessage(`=== NGO "${ngoId}" Summary (contract call) ===`, 'info');
+                            logMessage(`Total Received: ${summary[0].toString()}`, 'info');
+                            logMessage(`Total Spent: ${summary[1].toString()}`, 'info');
+                            logMessage(`Incoming Transactions: ${summary[2].toString()}`, 'info');
+                            logMessage(`Outgoing Transactions: ${summary[3].toString()}`, 'info');
+                            logMessage(`Current Balance: ${summary[4].toString()}`, 'info');
+                        } catch (contractSummaryError) {
+                            logMessage(`Contract summary call failed, trying direct call: ${contractSummaryError.message}`, 'info');
+                            
+                            // Fallback to direct provider call
+                            const summaryAbi = ['function getNgoSummary(string memory ngoId) view returns (uint256, uint256, uint256, uint256, uint256)'];
+                            const summaryInterface = new ethers.Interface(summaryAbi);
+                            
+                            const encodedSummaryCall = summaryInterface.encodeFunctionData('getNgoSummary', [ngoId]);
+                            
+                            const rawSummaryResult = await provider.call({
+                                to: contractAddress,
+                                data: encodedSummaryCall
+                            });
+                            
+                            const decodedSummary = summaryInterface.decodeFunctionResult('getNgoSummary', rawSummaryResult);
+                            
+                            logMessage(`=== NGO "${ngoId}" Summary (direct call) ===`, 'info');
+                            logMessage(`Total Received: ${decodedSummary[0].toString()}`, 'info');
+                            logMessage(`Total Spent: ${decodedSummary[1].toString()}`, 'info');
+                            logMessage(`Incoming Transactions: ${decodedSummary[2].toString()}`, 'info');
+                            logMessage(`Outgoing Transactions: ${decodedSummary[3].toString()}`, 'info');
+                            logMessage(`Current Balance: ${decodedSummary[4].toString()}`, 'info');
+                        }
                     } catch (summaryError) {
                         logMessage(`Could not retrieve detailed summary: ${summaryError.message}`, 'error');
                     }

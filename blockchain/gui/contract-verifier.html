@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contract Deployment Verifier</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 30px;
+    }
+    .card {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .field {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f9f9f9;
+      border-radius: 4px;
+    }
+    .success {
+      color: green;
+      font-weight: bold;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+    .code {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-family: monospace;
+    }
+    .actions {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Contract Deployment Verifier</h1>
+    <p>This tool helps diagnose issues with your blockchain contract deployments. It checks if a contract exists at a given address and verifies key functions.</p>
+    
+    <div class="card">
+      <h2>1. Connect to Ganache</h2>
+      <button id="connect-btn">Connect to Ganache</button>
+      <div id="connection-status" class="result">Not connected</div>
+    </div>
+    
+    <div class="card">
+      <h2>2. Verify Contract</h2>
+      <div class="field">
+        <label for="contract-address">Contract Address:</label>
+        <input type="text" id="contract-address" placeholder="0x...">
+      </div>
+      <button id="verify-btn">Verify Contract</button>
+      <div id="verification-result" class="result">Enter a contract address to verify</div>
+    </div>
+    
+    <div class="card">
+      <h2>3. Check Contract Functions</h2>
+      <button id="check-functions-btn">Check Contract Functions</button>
+      <div id="functions-result" class="result">Connect to a contract first</div>
+    </div>
+    
+    <div class="card">
+      <h2>4. Deploy New Contract</h2>
+      <p>If you need a new contract deployment:</p>
+      <button id="deploy-btn">Deploy New Contract</button>
+      <div id="deploy-result" class="result">Deployment status will appear here</div>
+    </div>
+    
+    <div class="card">
+      <h2>5. Actions</h2>
+      <div class="actions">
+        <button id="goto-main">Go to Main Interface</button>
+        <button id="goto-setup">Go to NGO Setup</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/ethers@6.10.0/dist/ethers.umd.js"></script>
+  <script src="contract-abi.js"></script>
+  <script>
+    // Global variables
+    let provider;
+    let signer;
+    let contract;
+    let contractAddress = '';
+    
+    // DOM Elements
+    const connectBtn = document.getElementById('connect-btn');
+    const verifyBtn = document.getElementById('verify-btn');
+    const checkFunctionsBtn = document.getElementById('check-functions-btn');
+    const deployBtn = document.getElementById('deploy-btn');
+    const connectionStatus = document.getElementById('connection-status');
+    const verificationResult = document.getElementById('verification-result');
+    const functionsResult = document.getElementById('functions-result');
+    const deployResult = document.getElementById('deploy-result');
+    const contractAddressInput = document.getElementById('contract-address');
+    const gotoMainBtn = document.getElementById('goto-main');
+    const gotoSetupBtn = document.getElementById('goto-setup');
+    
+    // Event Listeners
+    connectBtn.addEventListener('click', connectToGanache);
+    verifyBtn.addEventListener('click', verifyContract);
+    checkFunctionsBtn.addEventListener('click', checkContractFunctions);
+    deployBtn.addEventListener('click', deployNewContract);
+    gotoMainBtn.addEventListener('click', () => window.location.href = 'index.html');
+    gotoSetupBtn.addEventListener('click', () => window.location.href = 'account-setup.html');
+    
+    // Initialize
+    function init() {
+      // Check for saved contract address
+      const savedAddress = localStorage.getItem('donationContractAddress');
+      if (savedAddress) {
+        contractAddressInput.value = savedAddress;
+      }
+    }
+    
+    // Connect to Ganache
+    async function connectToGanache() {
+      connectionStatus.innerHTML = 'Connecting to Ganache...';
+      connectionStatus.className = 'result';
+      
+      try {
+        // Create provider with ENS disabled
+        const providerOptions = {
+          ensAddress: null, // Disable ENS lookups completely
+          chainId: 1337,    // Hardhat/Ganache default chain ID
+          name: "Ganache"   // Set network name
+        };
+        
+        // Try both localhost and 127.0.0.1 formats
+        try {
+          provider = new ethers.JsonRpcProvider('http://localhost:7545', providerOptions);
+          await provider.getBlockNumber(); // Test the connection
+        } catch (e) {
+          console.log('Trying alternative connection format...', e);
+          provider = new ethers.JsonRpcProvider('http://127.0.0.1:7545', providerOptions);
+          await provider.getBlockNumber(); // Test the connection
+        }
+        
+        // Get accounts from Ganache
+        const accounts = await provider.send('eth_accounts', []);
+        if (accounts && accounts.length > 0) {
+          // For ethers v6, we'll create a wallet with the private key
+          // This is the default private key for the first Hardhat account
+          const privateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+          signer = new ethers.Wallet(privateKey, provider);
+          
+          // Get basic network info without requiring ENS
+          const blockNumber = await provider.getBlockNumber();
+          const balance = await provider.getBalance(accounts[0]);
+          
+          connectionStatus.innerHTML = `
+            <p class="success">✓ Connected successfully</p>
+            <p>Network: Ganache (Chain ID: 1337)</p>
+            <p>Current Block: ${blockNumber}</p>
+            <p>Using Account: ${accounts[0]}</p>
+            <p>Balance: ${ethers.formatEther(balance)} ETH</p>
+          `;
+          connectionStatus.className = 'result';
+        } else {
+          throw new Error('No accounts found in Ganache');
+        }
+      } catch (error) {
+        console.error('Connection error:', error);
+        connectionStatus.innerHTML = `
+          <p class="error">✗ Connection failed</p>
+          <p>${error.message}</p>
+          <p>Make sure Ganache is running on port 7545</p>
+        `;
+        connectionStatus.className = 'result error';
+      }
+    }
+    
+    // Verify Contract
+        async function verifyContract() {
+      if (!provider) {
+        alert('Please connect to Ganache first');
+        return;
+      }
+      
+      const address = contractAddressInput.value;
+      if (!address || !address.startsWith('0x')) {
+        alert('Please enter a valid contract address');
+        return;
+      }
+      
+      verificationResult.innerHTML = 'Verifying contract...';
+      verificationResult.className = 'result';
+      
+      try {
+        console.log("Checking for code at address:", address);
+        // Check if there's bytecode at this address
+        const code = await provider.getCode(address);
+        console.log("Code length:", (code || "").length);
+        
+        if (code === '0x' || code === '') {
+          verificationResult.innerHTML = `
+            <p class="error">✗ No contract found at this address</p>
+            <p>The address ${address} does not contain any contract code.</p>
+            <p>Make sure the contract was deployed correctly.</p>
+            <p>Also verify that you're connected to the correct network where the contract was deployed.</p>
+          `;
+          verificationResult.className = 'result error';
+          return;
+        }        // Try to instantiate the contract
+        // Use a basic object for the provider to avoid ENS lookups
+        const simpleProvider = {
+          getCode: provider.getCode.bind(provider),
+          call: provider.call.bind(provider),
+          estimateGas: provider.estimateGas.bind(provider)
+        };
+        
+        contract = new ethers.Contract(address, CONTRACT_ABI, provider);
+        contractAddress = address;
+        
+        // Save to localStorage
+        localStorage.setItem('donationContractAddress', address);
+        
+        verificationResult.innerHTML = `
+          <p class="success">✓ Contract verified</p>
+          <p>Contract code found at address: ${address}</p>
+          <p>Contract instance created successfully</p>
+        `;
+        verificationResult.className = 'result success';
+      } catch (error) {
+        console.error('Verification error:', error);
+        verificationResult.innerHTML = `
+          <p class="error">✗ Verification failed</p>
+          <p>${error.message}</p>
+        `;
+        verificationResult.className = 'result error';
+      }
+    }
+    
+    // Check Contract Functions
+    async function checkContractFunctions() {
+      if (!contract) {
+        alert('Please verify a contract first');
+        return;
+      }
+      
+      functionsResult.innerHTML = 'Checking contract functions...';
+      functionsResult.className = 'result';
+      
+      const results = [];
+      
+      // Try to call various contract functions
+      try {
+        try {
+          const owner = await contract.owner();
+          results.push({name: 'owner()', success: true, result: owner});
+        } catch (e) {
+          results.push({name: 'owner()', success: false, error: e.message});
+        }
+        
+        try {
+          const totalDonations = await contract.totalDonations();
+          results.push({name: 'totalDonations()', success: true, result: totalDonations.toString()});
+        } catch (e) {
+          results.push({name: 'totalDonations()', success: false, error: e.message});
+        }
+        
+        try {
+          const donationCount = await contract.getIncomingDonationsCount();
+          results.push({name: 'getIncomingDonationsCount()', success: true, result: donationCount.toString()});
+        } catch (e) {
+          results.push({name: 'getIncomingDonationsCount()', success: false, error: e.message});
+        }
+        
+        try {
+          const activeNgos = await contract.getActiveNgoIds(100);
+          results.push({name: 'getActiveNgoIds(100)', success: true, result: JSON.stringify(activeNgos)});
+        } catch (e) {
+          results.push({name: 'getActiveNgoIds(100)', success: false, error: e.message});
+        }
+        
+        // Generate HTML for results
+        let resultsHTML = '<h3>Function Test Results:</h3>';
+        let successCount = 0;
+        
+        results.forEach(result => {
+          if (result.success) {
+            successCount++;
+            resultsHTML += `
+              <div>
+                <p><strong>${result.name}</strong>: <span class="success">✓ Success</span></p>
+                <p>Result: ${result.result}</p>
+              </div>
+            `;
+          } else {
+            resultsHTML += `
+              <div>
+                <p><strong>${result.name}</strong>: <span class="error">✗ Failed</span></p>
+                <p>Error: ${result.error}</p>
+              </div>
+            `;
+          }
+        });
+        
+        // Overall assessment
+        if (successCount === results.length) {
+          resultsHTML = `
+            <p class="success">✓ All functions working correctly</p>
+            ${resultsHTML}
+          `;
+        } else if (successCount > 0) {
+          resultsHTML = `
+            <p class="error">⚠️ Some functions are not working (${successCount}/${results.length} successful)</p>
+            ${resultsHTML}
+          `;
+        } else {
+          resultsHTML = `
+            <p class="error">✗ All functions failed</p>
+            <p>This might indicate an ABI mismatch or wrong contract address</p>
+            ${resultsHTML}
+          `;
+        }
+        
+        functionsResult.innerHTML = resultsHTML;
+      } catch (error) {
+        console.error('Function check error:', error);
+        functionsResult.innerHTML = `
+          <p class="error">✗ Function check failed</p>
+          <p>${error.message}</p>
+        `;
+        functionsResult.className = 'result error';
+      }
+    }
+    
+    // Deploy New Contract
+    async function deployNewContract() {
+      if (!provider || !signer) {
+        alert('Please connect to Ganache first');
+        return;
+      }
+      
+      deployResult.innerHTML = 'Preparing to deploy contract...';
+      
+      try {
+        deployResult.innerHTML = `
+          <p>Deploying contract requires the contract binary.</p>
+          <p>Please use one of these methods instead:</p>
+          <ol>
+            <li>Use the terminal command: <code>npx hardhat run scripts/deploy-to-ganache-fixed.js</code></li>
+            <li>Run the deploy-contract.sh (Linux/Mac) or deploy-contract.bat (Windows) script</li>
+          </ol>
+          <p>After deployment, come back here to verify the contract.</p>
+        `;
+      } catch (error) {
+        console.error('Deployment error:', error);
+        deployResult.innerHTML = `
+          <p class="error">✗ Deployment preparation failed</p>
+          <p>${error.message}</p>
+        `;
+      }
+    }
+    
+    // Run init on load
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

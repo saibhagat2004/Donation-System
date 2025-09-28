@@ -151,7 +151,7 @@
     <div class="test-section">
         <h2>1. Contract Address</h2>
         <label for="contract-address">Contract Address:</label>
-        <input type="text" id="contract-address" placeholder="Enter your contract address" value="0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab">
+        <input type="text" id="contract-address" placeholder="Enter your contract address" value="0x5FbDB2315678afecb367f032d93F642f64180aa3">
         <button onclick="saveContractAddress()" class="test-button">Save Address</button>
         <div id="save-status"></div>
     </div>
@@ -265,7 +265,14 @@
             log(`Testing connection to ${host}:7545...`);
             
             try {
-                const provider = new ethers.JsonRpcProvider(`http://${host}:7545`);
+                // Create provider options with ENS disabled to fix the ENS lookup errors
+                const providerOptions = {
+                    ensAddress: null, // Disable ENS lookups completely
+                    chainId: 1337,    // Hardhat/Ganache default chain ID
+                    name: "Ganache"   // Set network name
+                };
+                
+                const provider = new ethers.JsonRpcProvider(`http://${host}:7545`, providerOptions);
                 const blockNumber = await provider.getBlockNumber();
                 
                 statusElement.innerHTML = `<p class="success">✅ Successfully connected to Ganache! Current block: ${blockNumber}</p>`;
@@ -297,27 +304,23 @@
                 let accounts;
                 
                 try {
-                    // First try the accounts method
-                    accounts = await provider.listAccounts();
+                    // Use the direct RPC call to get accounts
+                    const rpcAccounts = await provider.send('eth_accounts', []);
+                    accounts = rpcAccounts.map(address => ({ address }));
+                    
+                    log(`Retrieved ${accounts.length} accounts via RPC call`);
                 } catch (error) {
-                    log('listAccounts failed, trying alternative approach...');
-                    // Try an alternative approach for ethers v6
+                    log('eth_accounts RPC call failed, trying alternative approach...');
+                    
+                    // Try with hardhat default private key
                     try {
-                        // Get first 10 accounts manually
-                        accounts = [];
-                        for (let i = 0; i < 10; i++) {
-                            try {
-                                const signer = await provider.getSigner(i);
-                                accounts.push({
-                                    address: await signer.getAddress()
-                                });
-                            } catch (e) {
-                                // Stop if we can't get any more accounts
-                                break;
-                            }
-                        }
+                        const privateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+                        const wallet = new ethers.Wallet(privateKey, provider);
+                        
+                        accounts = [{ address: await wallet.getAddress() }];
+                        log(`Created wallet with hardhat default private key: ${accounts[0].address}`);
                     } catch (e) {
-                        throw new Error('Could not retrieve accounts: ' + e.message);
+                        throw new Error('Could not retrieve accounts or create wallet: ' + e.message);
                     }
                 }
                 
@@ -365,17 +368,30 @@
                     return;
                 }
 
-                // Get signer
+                // Get signer using hardhat default private key
                 let signer;
                 try {
-                    const accounts = await provider.listAccounts();
-                    signer = await provider.getSigner(accounts[0]);
+                    const privateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+                    signer = new ethers.Wallet(privateKey, provider);
+                    log(`Created signer with address: ${await signer.getAddress()}`);
                 } catch (e) {
-                    log('Getting signer via listAccounts failed, trying alternative method...');
-                    signer = await provider.getSigner();
+                    log('Creating signer with private key failed: ' + e.message);
+                    throw e;
                 }
                 
-                // Initialize contract
+                // Initialize contract - first try with provider for read-only operations
+                // This helps diagnose if the issue is with the contract or with the signing
+                try {
+                    log('Testing read-only contract access first...');
+                    const readContract = new ethers.Contract(contractAddress, CONTRACT_ABI, provider);
+                    await readContract.owner();
+                    log('Read-only contract access successful, now trying with signer...');
+                } catch (e) {
+                    log('Read-only contract access failed: ' + e.message);
+                    // Continue to try with signer anyway
+                }
+                
+                // Initialize contract with signer for full access
                 const contract = new ethers.Contract(contractAddress, CONTRACT_ABI, signer);
                 
                 try {

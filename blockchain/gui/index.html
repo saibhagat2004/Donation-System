@@ -40,7 +40,7 @@
     <div class="card">
       <h2>NGO Data</h2>
       <div class="input-group">
-        <input type="text" id="ngo-id-input" placeholder="Enter NGO ID">
+        <input type="text" id="ngo-id-input" placeholder="Enter NGO ID" value="NGO-123">
         <button id="fetch-ngo-data">Fetch Data</button>
       </div>
       <div id="ngo-data" class="data-section">
@@ -76,10 +76,10 @@
     <div class="card">
       <h2>Record Donation</h2>
       <div class="form-group">
-        <input type="text" id="donation-ngo-id" placeholder="NGO ID">
-        <input type="text" id="donation-donor-id" placeholder="Donor ID">
-        <input type="text" id="donation-cause" placeholder="Cause">
-        <input type="number" id="donation-amount" placeholder="Amount (in rupees)">
+        <input type="text" id="donation-ngo-id" placeholder="NGO ID" value="NGO-123">
+        <input type="text" id="donation-donor-id" placeholder="Donor ID" value="DONOR1">
+        <input type="text" id="donation-cause" placeholder="Cause" value="Education">
+        <input type="number" id="donation-amount" placeholder="Amount (in rupees)" value="1000">
         <button id="record-donation">Record Donation</button>
       </div>
       <div id="donation-result" class="result"></div>
@@ -88,11 +88,11 @@
     <div class="card">
       <h2>Record Spending</h2>
       <div class="form-group">
-        <input type="text" id="spending-ngo-id" placeholder="NGO ID">
-        <input type="text" id="spending-receiver-id" placeholder="Receiver ID">
-        <input type="text" id="spending-cause" placeholder="Cause">
-        <input type="number" id="spending-amount" placeholder="Amount (in rupees)">
-        <input type="text" id="spending-receipt-hash" placeholder="Receipt Hash">
+        <input type="text" id="spending-ngo-id" placeholder="NGO ID" value="NGO-123">
+        <input type="text" id="spending-receiver-id" placeholder="Receiver ID" value="VENDOR1">
+        <input type="text" id="spending-cause" placeholder="Cause" value="School Supplies">
+        <input type="number" id="spending-amount" placeholder="Amount (in rupees)" value="500">
+        <input type="text" id="spending-receipt-hash" placeholder="Receipt Hash" value="RECEIPT-123">
         <button id="record-spending">Record Spending</button>
       </div>
       <div id="spending-result" class="result"></div>

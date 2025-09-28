@@ -1,14 +1,24 @@
-@echo off
-REM Fix Ganache connection issues
+@echo off@echo off
 
-echo === Ganache Connection Fix Tool ===
-echo This script will help resolve connection issues with Ganache
+REM Script to check Ganache accounts and their balancesREM Fix Ganache connection issues
+
+
+
+echo Checking Ganache accounts...echo === Ganache Connection Fix Tool ===
+
+echo.echo This script will help resolve connection issues with Ganache
+
 echo.
 
+call npx hardhat run scripts/check-ganache-accounts.js
+
 REM Check if Ganache is installed
-WHERE ganache >nul 2>nul
-IF %ERRORLEVEL% NEQ 0 (
-    echo Ganache not found! Installing it globally...
+
+echo.WHERE ganache >nul 2>nul
+
+echo Done.IF %ERRORLEVEL% NEQ 0 (
+
+pause    echo Ganache not found! Installing it globally...
     call npm install -g ganache
     echo.
 )

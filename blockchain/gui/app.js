@@ -5,7 +5,8 @@
 let provider;
 let signer;
 let donationContract;
-let contractAddress = '';
+// Use the Hardhat default deployed contract address
+let contractAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
 
 // DOM elements
 const connectBtn = document.getElementById('connect-wallet');
@@ -68,33 +69,73 @@ async function connectToGanache() {
     // Show connecting state
     connectionText.textContent = 'Connecting...';
     
+    // Create provider options with ENS disabled
+    const providerOptions = {
+      ensAddress: null, // Disable ENS lookups completely
+      chainId: 1337,    // Hardhat/Ganache default chain ID
+      name: "Ganache"   // Set network name
+    };
+    
     // Try both localhost and 127.0.0.1 formats
     try {
-      provider = new ethers.JsonRpcProvider('http://localhost:7545');
-      await provider.getBlockNumber(); // Test the connection
+      provider = new ethers.JsonRpcProvider('http://localhost:7545', providerOptions);
+      const blockNumber = await provider.getBlockNumber(); // Test the connection
+      console.log('Connected to Ganache on localhost:7545. Current block:', blockNumber);
     } catch (e) {
       console.log('Trying alternative connection format...');
-      provider = new ethers.JsonRpcProvider('http://127.0.0.1:7545');
-      await provider.getBlockNumber(); // Test the connection
+      provider = new ethers.JsonRpcProvider('http://127.0.0.1:7545', providerOptions);
+      const blockNumber = await provider.getBlockNumber(); // Test the connection
+      console.log('Connected to Ganache on 127.0.0.1:7545. Current block:', blockNumber);
     }
     
     console.log('Connected to provider successfully');
     
     // Get accounts from Ganache
     try {
-      // First try listAccounts (may not work in all ethers versions)
-      const accounts = await provider.listAccounts();
-      signer = await provider.getSigner(accounts[0]);
+      // Get accounts directly with ethers v6 approach
+      const accounts = await provider.send('eth_accounts', []);
+      if (accounts && accounts.length > 0) {
+        console.log('Available accounts:', accounts);
+        
+        // Use the same private key we're using in account-setup.html for consistency
+        // This is your updated private key
+        const privateKey = '0x69c3cf937091d5c71fe45ca0e738e5c54c96ddc233e8b61f0590a0081c6fd4f8';
+        signer = new ethers.Wallet(privateKey, provider);
+        
+        // Verify the signer address matches the expected account
+        const signerAddress = await signer.getAddress();
+        console.log('Signer created with address:', signerAddress);
+        
+        if (signerAddress.toLowerCase() !== '0x35b6cdc6F2a0990d38d232eEe6007846B531d5a0'.toLowerCase()) {
+          console.warn('Warning: Signer address does not match expected account');
+          console.warn('Signer:', signerAddress, 'Expected: 0x35b6cdc6F2a0990d38d232eEe6007846B531d5a0');
+        }
+      } else {
+        throw new Error('No accounts returned from provider');
+      }
     } catch (accountError) {
-      console.log('listAccounts failed, trying alternative approach...');
-      // Alternative approach for ethers v6
-      signer = await provider.getSigner();
+      console.error('Error getting accounts:', accountError);
+      // Try alternative way using provider's getSigner
+      try {
+        signer = provider.getSigner();
+        console.log('Got signer from provider directly');
+      } catch (signerError) {
+        console.error('Could not get signer:', signerError);
+        alert('Could not get a signer account. Please check console for details.');
+        return;
+      }
     }
     
     // Update UI
-    const address = await signer.getAddress();
-    connectionText.textContent = `Connected: ${shortenAddress(address)}`;
-    connectionIndicator.className = 'indicator online';
+    try {
+      const address = await signer.getAddress();
+      connectionText.textContent = `Connected: ${shortenAddress(address)}`;
+      connectionIndicator.className = 'indicator online';
+      console.log('Using account address:', address);
+    } catch (addressError) {
+      console.error('Could not get signer address:', addressError);
+      connectionText.textContent = 'Connected (address unknown)';
+    }
     
     // Check for contract address
     if (contractAddress) {
@@ -116,73 +157,210 @@ function initializeContract() {
   }
   
   try {
-    donationContract = new ethers.Contract(contractAddress, CONTRACT_ABI, signer);
+    // First create with provider for read operations
+    donationContract = new ethers.Contract(contractAddress, CONTRACT_ABI, provider);
+    
+    // Then connect with signer for write operations
+    if (signer) {
+      donationContract = donationContract.connect(signer);
+      console.log('Contract initialized with signer');
+      
+      // Verify if the signer is the contract owner for better UX feedback
+      donationContract.owner().then(ownerAddress => {
+        const signerPromise = signer.getAddress();
+        signerPromise.then(signerAddress => {
+          if (ownerAddress.toLowerCase() !== signerAddress.toLowerCase()) {
+            console.warn(`WARNING: Signer (${signerAddress}) is not the contract owner (${ownerAddress})`);
+            // Add an owner warning to the UI
+            const warningEl = document.createElement('div');
+            warningEl.className = 'result error';
+            warningEl.style.margin = '10px 0';
+            warningEl.textContent = `Warning: Your account is not the contract owner. Some operations may fail.`;
+            document.querySelector('.connection-status').appendChild(warningEl);
+          } else {
+            console.log(`Signer (${signerAddress}) is the contract owner`);
+            // Add a confirmation to the UI
+            const confirmEl = document.createElement('div');
+            confirmEl.className = 'result success';
+            confirmEl.style.margin = '10px 0';
+            confirmEl.textContent = `You are the contract owner and have full permissions.`;
+            document.querySelector('.connection-status').appendChild(confirmEl);
+          }
+        }).catch(err => console.error('Error getting signer address:', err));
+      }).catch(err => console.error('Error checking contract owner:', err));
+    } else {
+      console.warn('No signer available, contract is read-only');
+    }
+    
     contractAddressEl.textContent = contractAddress;
     
     // Fetch initial contract data
     fetchContractData();
   } catch (error) {
     console.error('Error initializing contract:', error);
+    alert('Error initializing contract: ' + error.message);
   }
 }
 
 // Fetch basic contract data
 async function fetchContractData() {
   try {
-    // Get owner address
-    const owner = await donationContract.owner();
-    ownerAddressEl.textContent = owner;
+    // First, check if the contract exists by getting its bytecode
+    const contractCode = await provider.getCode(contractAddress);
+    if (contractCode === '0x') {
+      console.error('No contract found at this address:', contractAddress);
+      alert('No contract found at the specified address. Please verify the contract address is correct.');
+      return;
+    }
     
-    // Get total donations
-    const totalDonations = await donationContract.totalDonations();
-    totalDonationsEl.textContent = ethers.formatUnits(totalDonations, 0);
+    console.log('Contract bytecode exists at address:', contractAddress);
+    
+    try {
+      // Get owner address - we'll try/catch each call separately for better error diagnostics
+      const owner = await donationContract.owner();
+      ownerAddressEl.textContent = owner;
+      console.log('Contract owner:', owner);
+    } catch (ownerError) {
+      console.error('Error fetching contract owner:', ownerError);
+      ownerAddressEl.textContent = 'Error fetching owner';
+    }
+    
+    try {
+      // Get total donations
+      const totalDonations = await donationContract.totalDonations();
+      totalDonationsEl.textContent = ethers.formatUnits(totalDonations, 0);
+      console.log('Total donations:', totalDonations.toString());
+    } catch (donationsError) {
+      console.error('Error fetching total donations:', donationsError);
+      totalDonationsEl.textContent = 'Error fetching donations';
+    }
     
     // Load initial transactions
-    await loadIncomingTransactions(0, 5);
-    await loadOutgoingTransactions(0, 5);
+    try {
+      await loadIncomingTransactions(0, 5);
+    } catch (incomingError) {
+      console.error('Error loading incoming transactions:', incomingError);
+    }
+    
+    try {
+      await loadOutgoingTransactions(0, 5);
+    } catch (outgoingError) {
+      console.error('Error loading outgoing transactions:', outgoingError);
+    }
   } catch (error) {
     console.error('Error fetching contract data:', error);
+    alert('Error fetching contract data: ' + error.message + '\n\nPlease check the console for more details.');
   }
 }
 
 // Fetch NGO data
 async function fetchNgoData() {
-  const ngoId = document.getElementById('ngo-id-input').value;
+  const ngoId = document.getElementById('ngo-id-input').value.trim();
   if (!ngoId) {
     alert('Please enter an NGO ID');
     return;
   }
   
   try {
-    const summary = await donationContract.getNgoSummary(ngoId);
+    console.log(`Fetching data for NGO: "${ngoId}"`);
     
-    document.getElementById('ngo-total-received').textContent = ethers.formatUnits(summary[0], 0);
-    document.getElementById('ngo-total-spent').textContent = ethers.formatUnits(summary[1], 0);
-    document.getElementById('ngo-incoming-count').textContent = ethers.formatUnits(summary[2], 0);
-    document.getElementById('ngo-outgoing-count').textContent = ethers.formatUnits(summary[3], 0);
-    document.getElementById('ngo-balance').textContent = ethers.formatUnits(summary[4], 0);
+    // First try to get the balance to verify if NGO exists
+    try {
+      const balance = await donationContract.getNgoBalance(ngoId, { gasLimit: 500000 });
+      console.log(`NGO "${ngoId}" balance:`, balance.toString());
+      document.getElementById('ngo-balance').textContent = ethers.formatUnits(balance, 0);
+    } catch (balanceError) {
+      console.error('Error getting NGO balance:', balanceError);
+    }
+    
+    // Then try to get the full summary
+    try {
+      const options = { gasLimit: 500000 };
+      const summary = await donationContract.getNgoSummary(ngoId, options);
+      
+      document.getElementById('ngo-total-received').textContent = ethers.formatUnits(summary[0], 0);
+      document.getElementById('ngo-total-spent').textContent = ethers.formatUnits(summary[1], 0);
+      document.getElementById('ngo-incoming-count').textContent = ethers.formatUnits(summary[2], 0);
+      document.getElementById('ngo-outgoing-count').textContent = ethers.formatUnits(summary[3], 0);
+      document.getElementById('ngo-balance').textContent = ethers.formatUnits(summary[4], 0);
+      
+      console.log(`NGO "${ngoId}" summary:`, {
+        totalReceived: summary[0].toString(),
+        totalSpent: summary[1].toString(),
+        incomingCount: summary[2].toString(),
+        outgoingCount: summary[3].toString(),
+        currentBalance: summary[4].toString()
+      });
+    } catch (summaryError) {
+      console.error('Error getting NGO summary, trying direct call:', summaryError);
+      
+      // Try direct call as fallback
+      try {
+        // Encode function call to getNgoSummary(string)
+        const summaryAbi = ['function getNgoSummary(string memory ngoId) view returns (uint256, uint256, uint256, uint256, uint256)'];
+        const summaryInterface = new ethers.Interface(summaryAbi);
+        const encodedSummaryCall = summaryInterface.encodeFunctionData('getNgoSummary', [ngoId]);
+        
+        const rawSummaryResult = await provider.call({
+          to: contractAddress,
+          data: encodedSummaryCall
+        });
+        
+        const decodedSummary = summaryInterface.decodeFunctionResult('getNgoSummary', rawSummaryResult);
+        
+        document.getElementById('ngo-total-received').textContent = ethers.formatUnits(decodedSummary[0], 0);
+        document.getElementById('ngo-total-spent').textContent = ethers.formatUnits(decodedSummary[1], 0);
+        document.getElementById('ngo-incoming-count').textContent = ethers.formatUnits(decodedSummary[2], 0);
+        document.getElementById('ngo-outgoing-count').textContent = ethers.formatUnits(decodedSummary[3], 0);
+        document.getElementById('ngo-balance').textContent = ethers.formatUnits(decodedSummary[4], 0);
+        
+        console.log(`NGO "${ngoId}" summary (direct call):`, {
+          totalReceived: decodedSummary[0].toString(),
+          totalSpent: decodedSummary[1].toString(),
+          incomingCount: decodedSummary[2].toString(),
+          outgoingCount: decodedSummary[3].toString(),
+          currentBalance: decodedSummary[4].toString()
+        });
+      } catch (directCallError) {
+        console.error('Direct call also failed:', directCallError);
+        alert(`Error fetching NGO data for "${ngoId}". This NGO might not exist.`);
+      }
+    }
   } catch (error) {
     console.error('Error fetching NGO data:', error);
-    alert('Error fetching NGO data. Please check the NGO ID and try again.');
+    alert(`Error fetching NGO data for "${ngoId}". Please check the NGO ID and try again.`);
   }
 }
 
 // Fetch active NGOs
 async function fetchActiveNgos() {
   try {
-    const activeNgos = await donationContract.getActiveNgoIds(100);
+    console.log('Fetching active NGOs...');
+    const options = { gasLimit: 500000 };
+    const activeNgos = await donationContract.getActiveNgoIds(100, options);
     const ngoListEl = document.getElementById('active-ngos-list');
     ngoListEl.innerHTML = '';
     
+    console.log(`Found ${activeNgos.length} active NGOs:`, activeNgos);
+    
     activeNgos.forEach(ngoId => {
+      // Clean the NGO ID (remove any quotes or extra whitespace)
+      const cleanNgoId = ngoId.trim();
+      
       const item = document.createElement('div');
       item.className = 'data-list-item';
-      item.textContent = ngoId;
+      item.textContent = cleanNgoId;
+      
+      // Add a click event to populate the NGO ID input field and fetch data
       item.addEventListener('click', () => {
-        document.getElementById('ngo-id-input').value = ngoId;
+        document.getElementById('ngo-id-input').value = cleanNgoId;
         fetchNgoData();
       });
+      
       ngoListEl.appendChild(item);
+      
+      // Log each NGO we found
+      console.log(`- Found NGO: "${cleanNgoId}"`);
     });
     
     if (activeNgos.length === 0) {
@@ -190,17 +368,26 @@ async function fetchActiveNgos() {
       item.className = 'data-list-item';
       item.textContent = 'No active NGOs found';
       ngoListEl.appendChild(item);
+      console.log('No active NGOs found');
     }
   } catch (error) {
     console.error('Error fetching active NGOs:', error);
+    
+    const ngoListEl = document.getElementById('active-ngos-list');
+    ngoListEl.innerHTML = '';
+    
+    const errorItem = document.createElement('div');
+    errorItem.className = 'data-list-item error';
+    errorItem.textContent = 'Error: ' + error.message;
+    ngoListEl.appendChild(errorItem);
   }
 }
 
 // Record donation
 async function recordDonation() {
-  const ngoId = document.getElementById('donation-ngo-id').value;
-  const donorId = document.getElementById('donation-donor-id').value;
-  const cause = document.getElementById('donation-cause').value;
+  const ngoId = document.getElementById('donation-ngo-id').value.trim();
+  const donorId = document.getElementById('donation-donor-id').value.trim();
+  const cause = document.getElementById('donation-cause').value.trim();
   const amount = document.getElementById('donation-amount').value;
   
   if (!ngoId || !donorId || !cause || !amount) {
@@ -209,22 +396,30 @@ async function recordDonation() {
   }
   
   try {
+    console.log(`Recording donation of ${amount} to "${ngoId}"`);
+    
     const timestamp = Math.floor(Date.now() / 1000);
-    const tx = await donationContract.recordDonation(ngoId, donorId, cause, amount, timestamp);
+    const options = { gasLimit: 500000 };
+    
+    const tx = await donationContract.recordDonation(ngoId, donorId, cause, amount, timestamp, options);
     
     const resultEl = document.getElementById('donation-result');
     resultEl.textContent = `Transaction submitted. Hash: ${tx.hash}`;
     resultEl.className = 'result success';
+    console.log(`Donation transaction submitted: ${tx.hash}`);
     
     // Wait for the transaction to be mined
     await tx.wait();
     resultEl.textContent = 'Donation recorded successfully!';
+    console.log('Donation transaction confirmed!');
+    
+    // Update NGO input field with this NGO ID for easy checking
+    document.getElementById('ngo-id-input').value = ngoId;
     
     // Update UI
     fetchContractData();
-    if (document.getElementById('ngo-id-input').value === ngoId) {
-      fetchNgoData();
-    }
+    fetchNgoData();
+    fetchActiveNgos();
   } catch (error) {
     console.error('Error recording donation:', error);
     const resultEl = document.getElementById('donation-result');
@@ -235,11 +430,11 @@ async function recordDonation() {
 
 // Record spending
 async function recordSpending() {
-  const ngoId = document.getElementById('spending-ngo-id').value;
-  const receiverId = document.getElementById('spending-receiver-id').value;
-  const cause = document.getElementById('spending-cause').value;
+  const ngoId = document.getElementById('spending-ngo-id').value.trim();
+  const receiverId = document.getElementById('spending-receiver-id').value.trim();
+  const cause = document.getElementById('spending-cause').value.trim();
   const amount = document.getElementById('spending-amount').value;
-  const receiptHash = document.getElementById('spending-receipt-hash').value || 'RECEIPT_HASH';
+  const receiptHash = document.getElementById('spending-receipt-hash').value.trim() || 'RECEIPT_HASH';
   
   if (!ngoId || !receiverId || !cause || !amount) {
     alert('Please fill all fields');
@@ -247,37 +442,78 @@ async function recordSpending() {
   }
   
   try {
+    console.log(`Recording spending of ${amount} from "${ngoId}" to "${receiverId}"`);
+    
+    // Check if we're the contract owner
+    try {
+      const owner = await donationContract.owner();
+      const signerAddress = await signer.getAddress();
+      
+      if (owner.toLowerCase() !== signerAddress.toLowerCase()) {
+        console.warn(`WARNING: Your address (${signerAddress}) is not the contract owner (${owner})`);
+        alert(`Only the contract owner (${owner}) can record spending. Your address is ${signerAddress}. Transaction may fail.`);
+      }
+    } catch (ownerError) {
+      console.error('Error checking owner:', ownerError);
+    }
+    
+    // First verify the NGO has enough balance
+    try {
+      const balance = await donationContract.getNgoBalance(ngoId);
+      if (balance < amount) {
+        alert(`NGO "${ngoId}" has insufficient balance: ${balance} < ${amount}`);
+        console.warn(`NGO has insufficient balance: ${balance} < ${amount}`);
+        return;
+      }
+      console.log(`NGO "${ngoId}" has sufficient balance: ${balance} >= ${amount}`);
+    } catch (balanceError) {
+      console.error('Error checking NGO balance:', balanceError);
+      alert(`Could not verify NGO "${ngoId}" balance. This NGO might not exist.`);
+      return;
+    }
+    
     const timestamp = Math.floor(Date.now() / 1000);
     // Hash the receipt
     const verificationHash = ethers.keccak256(ethers.toUtf8Bytes(receiptHash));
     
+    const options = { gasLimit: 500000 };
     const tx = await donationContract.recordSpending(
       ngoId, 
       receiverId, 
       cause, 
       amount, 
       timestamp,
-      verificationHash
+      verificationHash,
+      options
     );
     
     const resultEl = document.getElementById('spending-result');
     resultEl.textContent = `Transaction submitted. Hash: ${tx.hash}`;
     resultEl.className = 'result success';
+    console.log(`Spending transaction submitted: ${tx.hash}`);
     
     // Wait for the transaction to be mined
     await tx.wait();
     resultEl.textContent = 'Spending recorded successfully!';
+    console.log('Spending transaction confirmed!');
+    
+    // Update NGO input field with this NGO ID for easy checking
+    document.getElementById('ngo-id-input').value = ngoId;
     
     // Update UI
     fetchContractData();
-    if (document.getElementById('ngo-id-input').value === ngoId) {
-      fetchNgoData();
-    }
+    fetchNgoData();
   } catch (error) {
     console.error('Error recording spending:', error);
     const resultEl = document.getElementById('spending-result');
     resultEl.textContent = `Error: ${error.message}`;
     resultEl.className = 'result error';
+    
+    if (error.message.includes("Only owner")) {
+      resultEl.textContent += '. You must be the contract owner to record spending.';
+    } else if (error.message.includes("Insufficient NGO balance")) {
+      resultEl.textContent += '. The NGO does not have enough funds.';
+    }
   }
 }
 
@@ -370,11 +606,31 @@ function shortenAddress(address) {
 }
 
 // Set contract address manually
-function setContractAddressManually() {
+async function setContractAddressManually() {
   const newContractAddress = prompt('Enter contract address:');
-  if (newContractAddress) {
+  if (newContractAddress && newContractAddress.startsWith('0x')) {
+    // Validate the address by checking if there's code at that address
+    if (provider) {
+      try {
+        const code = await provider.getCode(newContractAddress);
+        if (code === '0x') {
+          alert('Warning: No contract found at this address. Are you sure this is correct?');
+          const confirm = window.confirm('No contract code found. Do you want to continue anyway?');
+          if (!confirm) {
+            return;
+          }
+        } else {
+          console.log('Contract code found at address:', newContractAddress);
+        }
+      } catch (error) {
+        console.error('Error checking contract code:', error);
+      }
+    }
+    
     contractAddress = newContractAddress;
     localStorage.setItem('donationContractAddress', newContractAddress);
+    contractAddressEl.textContent = newContractAddress;
+    console.log('Contract address set to:', newContractAddress);
     
     // If already connected to Ganache, initialize the contract
     if (provider && signer) {
@@ -383,6 +639,8 @@ function setContractAddressManually() {
       // Try to connect to Ganache
       connectToGanache();
     }
+  } else if (newContractAddress !== null) {
+    alert('Please enter a valid contract address starting with 0x');
   }
 }
 
