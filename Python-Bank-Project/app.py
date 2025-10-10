@@ -9,6 +9,7 @@ from datetime import datetime
 from customer import Customer
 from bank import Bank
 from register import SignUp, SignIn
+from blockchain_integration import blockchain
 import random
 
 app = Flask(__name__)
@@ -261,10 +262,43 @@ def api_deposit():
         conn.commit()
         conn.close()
 
+        # 🔗 BLOCKCHAIN INTEGRATION: Record deposit on blockchain
+        blockchain_result = None
+        blockchain_tx_hash = None
+        blockchain_tx_id = None
+        
+        try:
+            blockchain_result = blockchain.record_donation_on_blockchain(
+                ngo_account=account_number,
+                donor_id=donor_id_value or f"deposit_{account_number}",
+                cause=cause or "Cash Deposit",
+                amount=amount
+            )
+            
+            if blockchain_result and blockchain_result['success']:
+                blockchain_tx_hash = blockchain_result.get('tx_hash')
+                blockchain_tx_id = blockchain_result.get('blockchain_tx_id')
+                print(f"✅ Deposit recorded on blockchain: {blockchain_tx_hash}")
+            else:
+                print(f"⚠️ Blockchain recording failed for deposit: {blockchain_result.get('error') if blockchain_result else 'Unknown error'}")
+                
+        except Exception as blockchain_error:
+            print(f"❌ Blockchain error during deposit: {blockchain_error}")
+            blockchain_result = {
+                'success': False,
+                'error': str(blockchain_error)
+            }
+
         return jsonify({
             'success': True,
             'message': f'₹{amount} deposited successfully!',
-            'new_balance': new_balance
+            'new_balance': new_balance,
+            'blockchain': {
+                'recorded': blockchain_result['success'] if blockchain_result else False,
+                'tx_hash': blockchain_tx_hash,
+                'blockchain_tx_id': blockchain_tx_id,
+                'error': blockchain_result.get('error') if blockchain_result and not blockchain_result['success'] else None
+            }
         })
 
     except Exception as e:
@@ -313,10 +347,44 @@ def api_withdraw():
         conn.commit()
         conn.close()
 
+        # 🔗 BLOCKCHAIN INTEGRATION: Record withdrawal on blockchain
+        blockchain_result = None
+        blockchain_tx_hash = None
+        blockchain_tx_id = None
+        
+        try:
+            # For withdrawals, we record as spending from the NGO account
+            blockchain_result = blockchain.record_spending_on_blockchain(
+                ngo_account=account_number,
+                receiver_id=donor_id_value or f"cash_withdrawal_{username}",
+                cause=cause or "Cash Withdrawal", 
+                amount=amount
+            )
+            
+            if blockchain_result and blockchain_result['success']:
+                blockchain_tx_hash = blockchain_result.get('tx_hash')
+                blockchain_tx_id = blockchain_result.get('blockchain_tx_id')
+                print(f"✅ Withdrawal recorded on blockchain: {blockchain_tx_hash}")
+            else:
+                print(f"⚠️ Blockchain recording failed for withdrawal: {blockchain_result.get('error') if blockchain_result else 'Unknown error'}")
+                
+        except Exception as blockchain_error:
+            print(f"❌ Blockchain error during withdrawal: {blockchain_error}")
+            blockchain_result = {
+                'success': False,
+                'error': str(blockchain_error)
+            }
+
         return jsonify({
             'success': True,
             'message': f'₹{amount} withdrawn successfully!',
-            'new_balance': new_balance
+            'new_balance': new_balance,
+            'blockchain': {
+                'recorded': blockchain_result['success'] if blockchain_result else False,
+                'tx_hash': blockchain_tx_hash,
+                'blockchain_tx_id': blockchain_tx_id,
+                'error': blockchain_result.get('error') if blockchain_result and not blockchain_result['success'] else None
+            }
         })
 
     except Exception as e:
@@ -404,10 +472,79 @@ def api_transfer():
         conn.commit()
         conn.close()
 
+        # 🔗 BLOCKCHAIN INTEGRATION: Record transfer on blockchain
+        blockchain_result = None
+        blockchain_tx_hash = None
+        blockchain_tx_id = None
+        
+        try:
+            # Record the transfer: spending from sender, donation to receiver
+            # First, record as spending from sender's account
+            print(f"🔗 Recording spending from sender account: NGO_{sender_account}")
+            spending_result = blockchain.record_spending_on_blockchain(
+                ngo_account=sender_account,
+                receiver_id=f"transfer_to_{receiver_account}",
+                cause=cause or "Fund Transfer (Outgoing)",
+                amount=amount
+            )
+            
+            # Then, record as donation to receiver's account 
+            print(f"🔗 Recording donation to receiver account: NGO_{receiver_account}")
+            donation_result = blockchain.record_donation_on_blockchain(
+                ngo_account=receiver_account,
+                donor_id=sender_donor_id or f"transfer_from_{sender_account}",
+                cause=cause or "Fund Transfer (Incoming)",
+                amount=amount
+            )
+            
+            # Create combined result showing both transactions
+            blockchain_result = {
+                'success': spending_result.get('success', False) and donation_result.get('success', False),
+                'spending': {
+                    'tx_hash': spending_result.get('tx_hash'),
+                    'blockchain_tx_id': spending_result.get('blockchain_tx_id'),
+                    'success': spending_result.get('success', False)
+                },
+                'donation': {
+                    'tx_hash': donation_result.get('tx_hash'),
+                    'blockchain_tx_id': donation_result.get('blockchain_tx_id'),
+                    'success': donation_result.get('success', False)
+                },
+                'tx_hash': donation_result.get('tx_hash'),  # Primary TX hash for compatibility
+                'blockchain_tx_id': donation_result.get('blockchain_tx_id'),  # Primary TX ID
+                'error': spending_result.get('error') or donation_result.get('error')
+            }
+            
+            print(f"✅ Transfer recorded:")
+            print(f"   Spending TX: {spending_result.get('tx_hash', 'FAILED')} (ID: {spending_result.get('blockchain_tx_id', 'N/A')})")
+            print(f"   Donation TX: {donation_result.get('tx_hash', 'FAILED')} (ID: {donation_result.get('blockchain_tx_id', 'N/A')})")
+            
+        except Exception as blockchain_error:
+            print(f"❌ Blockchain error during transfer: {blockchain_error}")
+            blockchain_result = {
+                'success': False,
+                'error': str(blockchain_error)
+            }
+            
+        if blockchain_result and blockchain_result['success']:
+            blockchain_tx_hash = blockchain_result.get('tx_hash')
+            blockchain_tx_id = blockchain_result.get('blockchain_tx_id')
+            print(f"✅ Transfer recorded on blockchain: {blockchain_tx_hash}")
+        else:
+            print(f"⚠️ Blockchain recording failed for transfer: {blockchain_result.get('error') if blockchain_result else 'Unknown error'}")
+
         return jsonify({
             'success': True,
             'message': f'₹{amount} transferred successfully to account {receiver_account}!',
-            'new_balance': new_sender_balance
+            'new_balance': new_sender_balance,
+            'blockchain': {
+                'recorded': blockchain_result['success'] if blockchain_result else False,
+                'tx_hash': blockchain_tx_hash,
+                'blockchain_tx_id': blockchain_tx_id,
+                'spending_tx': blockchain_result.get('spending', {}) if blockchain_result else {},
+                'donation_tx': blockchain_result.get('donation', {}) if blockchain_result else {},
+                'error': blockchain_result.get('error') if blockchain_result and not blockchain_result['success'] else None
+            }
         })
 
     except Exception as e:
@@ -463,10 +600,47 @@ def api_add_money():
         conn.commit()
         conn.close()
 
+        # 🔗 BLOCKCHAIN INTEGRATION: Record donation on blockchain
+        blockchain_result = None
+        blockchain_tx_hash = None
+        blockchain_tx_id = None
+        
+        try:
+            print(f"🔗 Recording donation on blockchain: ₹{amount} to account {account_number}")
+            
+            # Record donation on blockchain smart contract
+            blockchain_result = blockchain.record_donation_on_blockchain(
+                ngo_account=str(account_number),
+                donor_id=donor_id_value or "ANONYMOUS",
+                cause=cause or "general",
+                amount=amount
+            )
+            
+            if blockchain_result['success']:
+                blockchain_tx_hash = blockchain_result['tx_hash']
+                blockchain_tx_id = blockchain_result['blockchain_tx_id']
+                print(f"✅ Blockchain recording successful: {blockchain_tx_hash}")
+            else:
+                print(f"⚠️ Blockchain recording failed: {blockchain_result['error']}")
+                
+        except Exception as blockchain_error:
+            print(f"❌ Blockchain integration error: {blockchain_error}")
+            # Don't fail the entire operation if blockchain fails
+            blockchain_result = {
+                'success': False,
+                'error': str(blockchain_error)
+            }
+
         return jsonify({
             'success': True,
             'message': f'₹{amount} added successfully to account {account_number}!',
-            'new_balance': new_balance
+            'new_balance': new_balance,
+            'blockchain': {
+                'recorded': blockchain_result['success'] if blockchain_result else False,
+                'tx_hash': blockchain_tx_hash,
+                'blockchain_tx_id': blockchain_tx_id,
+                'error': blockchain_result.get('error') if blockchain_result and not blockchain_result['success'] else None
+            }
         })
 
     except Exception as e:
@@ -834,7 +1008,62 @@ def api_delete_user():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/blockchain/status', methods=['GET'])
+def api_blockchain_status():
+    """Get blockchain connection status and information"""
+    try:
+        status = blockchain.get_blockchain_status()
+        return jsonify({
+            'success': True,
+            'blockchain_status': status
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'blockchain_status': {'connected': False, 'error': str(e)}
+        }), 500
+
+@app.route('/api/blockchain/ngo-balance/<account_number>', methods=['GET'])
+def api_ngo_blockchain_balance(account_number):
+    """Get NGO balance from blockchain"""
+    try:
+        balance = blockchain.get_ngo_balance_from_blockchain(account_number)
+        if balance is not None:
+            return jsonify({
+                'success': True,
+                'account_number': account_number,
+                'blockchain_balance': balance,
+                'ngo_id': f"NGO_{account_number}"
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to fetch balance from blockchain'
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
     print("Starting Banking Simulation Server...")
     print("Access the application at: http://localhost:5050")
+    
+    # Initialize blockchain connection on startup
+    try:
+        print("🔗 Initializing blockchain connection...")
+        if blockchain.connect():
+            print("✅ Blockchain integration ready!")
+            status = blockchain.get_blockchain_status()
+            print(f"   Contract: {status.get('contract_address', 'Unknown')}")
+            print(f"   Account: {status.get('account', 'Unknown')}")
+            print(f"   Latest Block: {status.get('latest_block', 'Unknown')}")
+        else:
+            print("⚠️ Blockchain connection failed - running without blockchain integration")
+    except Exception as e:
+        print(f"❌ Blockchain initialization error: {e}")
+        print("⚠️ Continuing without blockchain integration")
+    
     app.run(debug=True, host='0.0.0.0', port=5050)
