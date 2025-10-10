@@ -39,8 +39,46 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Migrate existing transaction tables to include cause column
+def migrate_transaction_tables():
+    """Add cause column to existing transaction tables"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all existing users
+        cursor.execute("SELECT username FROM customers")
+        users = cursor.fetchall()
+        
+        for user in users:
+            username = user['username']
+            table_name = f"{username}_transaction"
+            
+            try:
+                # Check if table exists and if cause column exists
+                cursor.execute(f"PRAGMA table_info({table_name})")
+                columns = [column[1] for column in cursor.fetchall()]
+                
+                if 'cause' not in columns and len(columns) > 0:
+                    # Add cause column to existing table
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN cause VARCHAR(50)")
+                    print(f"✅ Added cause column to {table_name}")
+                    
+            except sqlite3.OperationalError as e:
+                # Table might not exist yet, which is fine
+                print(f"⚠️ Could not migrate {table_name}: {e}")
+                continue
+        
+        conn.commit()
+        conn.close()
+        print("🎉 Transaction table migration completed!")
+        
+    except Exception as e:
+        print(f"❌ Migration error: {e}")
+
 # Initialize database on startup
 init_db()
+migrate_transaction_tables()
 
 # Serve static files
 @app.route('/')
@@ -461,7 +499,8 @@ def api_transactions():
                     'transaction_type': trans['transaction_type'],  # Updated from 'remarks'
                     'amount': trans['amount'],
                     'donor_id': trans['donor_id'],  # Added donor_id to response
-                    'cause': trans['cause'] if 'cause' in trans.keys() else None  # Add cause to response
+                    'cause': trans['cause'] if 'cause' in trans.keys() else None,  # Add cause to response
+                    'transaction_direction': 'credit' if 'Deposit' in trans['transaction_type'] or 'From' in trans['transaction_type'] or 'Received' in trans['transaction_type'] else 'debit'
                 })
             
             conn.close()
@@ -575,7 +614,7 @@ def api_epassbook():
                     'donor_id': trans['donor_id'],
                     'cause': trans['cause'] if 'cause' in trans.keys() else None,  # Add cause to response
                     # Add additional useful data
-                    'transaction_direction': 'credit' if 'Deposit' in trans['transaction_type'] or 'From' in trans['transaction_type'] else 'debit'
+                    'transaction_direction': 'credit' if 'Deposit' in trans['transaction_type'] or 'From' in trans['transaction_type'] or 'Received' in trans['transaction_type'] else 'debit'
                 })
             
             # Check if we need to export to CSV
