@@ -445,13 +445,18 @@ export const verifyDonationPayment = async (req, res) => {
         
         if (ngoAccountNumber) {
           try {
-            console.log(`🏦 Attempting to transfer ₹${updatedDonation.amount} to NGO bank account: ${ngoAccountNumber}`);
+            // Get campaign category to use as donation cause
+            const campaignInfo = await Campaign.findById(updatedDonation.campaign_id);
+            const donationCause = campaignInfo ? campaignInfo.category : 'general';
+            
+            console.log(`🏦 Attempting to transfer ₹${updatedDonation.amount} to NGO bank account: ${ngoAccountNumber} (Cause: ${donationCause})`);
           
-            // Call Python Banking API to add money
+            // Call Python Banking API to add money with cause parameter
             const bankingApiResponse = await axios.post('http://localhost:5050/api/add_money', {
               account_number: parseInt(ngoAccountNumber),
               amount: updatedDonation.amount, // Send donation amount to NGO
-              donor_id: updatedDonation._id.toString() // Send donation MongoDB ObjectID as donor_id for tracking
+              donor_id: updatedDonation._id.toString(), // Send donation MongoDB ObjectID as donor_id for tracking
+              cause: donationCause // Send the donation cause (education, health, etc.)
             }, {
               headers: { 'Content-Type': 'application/json' },
               timeout: 10000 // 10 second timeout
@@ -465,7 +470,7 @@ export const verifyDonationPayment = async (req, res) => {
                 settlement_status: "SETTLED",
                 settlement_id: settlementId,
                 settlement_amount: updatedDonation.amount,
-                settlement_notes: `Funds transferred to bank account ${ngoAccountNumber}`,
+                settlement_notes: `Funds transferred to bank account ${ngoAccountNumber} for cause: ${donationCause}`,
                 settled_at: new Date()
               });
             } else {
@@ -479,25 +484,29 @@ export const verifyDonationPayment = async (req, res) => {
             console.error('❌ Banking API call failed:', apiError.message);
             
             // Fallback to direct database settlement
-            console.log(`⚠️ Falling back to direct database settlement for donation: ₹${updatedDonation.amount}`);
+            console.log(`⚠️ Falling back to direct database settlement for donation: ₹${updatedDonation.amount} (Cause: ${donationCause})`);
             
             await Donation.findByIdAndUpdate(updatedDonation._id, {
               settlement_status: "SETTLED",
               settlement_id: settlementId,
               settlement_amount: updatedDonation.amount,
-              settlement_notes: `Direct database settlement (Banking API failed: ${apiError.message})`,
+              settlement_notes: `Direct database settlement for cause: ${donationCause} (Banking API failed: ${apiError.message})`,
               settled_at: new Date()
             });
           }
         } else {
-          console.log(`⚠️ No NGO bank account found. Using direct settlement for donation: ₹${updatedDonation.amount}`);
+          // Get campaign category to use as donation cause
+          const campaignInfo = await Campaign.findById(updatedDonation.campaign_id);
+          const donationCause = campaignInfo ? campaignInfo.category : 'general';
+          
+          console.log(`⚠️ No NGO bank account found. Using direct settlement for donation: ₹${updatedDonation.amount} (Cause: ${donationCause})`);
           
           // Update settlement status
           await Donation.findByIdAndUpdate(updatedDonation._id, {
             settlement_status: "SETTLED",
             settlement_id: settlementId,
             settlement_amount: updatedDonation.amount,
-            settlement_notes: `Direct database settlement (No bank account available)`,
+            settlement_notes: `Direct database settlement for cause: ${donationCause} (No bank account available)`,
             settled_at: new Date()
           });
           

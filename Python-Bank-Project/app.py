@@ -100,7 +100,8 @@ def api_signup():
                 account_number INTEGER,
                 transaction_type VARCHAR(30),
                 amount INTEGER,
-                donor_id VARCHAR(64)
+                donor_id VARCHAR(64),
+                cause VARCHAR(50)
             )
         """)
         
@@ -190,7 +191,8 @@ def api_deposit():
         username = data.get('username')
         amount = int(data.get('amount'))
         account_number = data.get('account_number')
-        donor_id = data.get('donor_id')  # New parameter for donor_id
+        donor_id = data.get('donor_id')  # Parameter for donor_id
+        cause = data.get('cause')  # New parameter for donation cause (education, health, etc.)
 
         if not all([username, amount, account_number]) or amount <= 0:
             return jsonify({'success': False, 'message': 'Invalid input data'}), 400
@@ -214,9 +216,9 @@ def api_deposit():
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
-            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
-            VALUES (?, ?, 'Amount Deposit', ?, ?)
-        """, (str(datetime.now()), account_number, amount, donor_id_value))
+            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id, cause)
+            VALUES (?, ?, 'Amount Deposit', ?, ?, ?)
+        """, (str(datetime.now()), account_number, amount, donor_id_value, cause))
         
         conn.commit()
         conn.close()
@@ -237,7 +239,8 @@ def api_withdraw():
         username = data.get('username')
         amount = int(data.get('amount'))
         account_number = data.get('account_number')
-        donor_id = data.get('donor_id')  # New parameter for donor_id
+        donor_id = data.get('donor_id')  # Parameter for donor_id
+        cause = data.get('cause')  # New parameter for donation cause
 
         if not all([username, amount, account_number]) or amount <= 0:
             return jsonify({'success': False, 'message': 'Invalid input data'}), 400
@@ -265,9 +268,9 @@ def api_withdraw():
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
-            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
-            VALUES (?, ?, 'Amount Withdraw', ?, ?)
-        """, (str(datetime.now()), account_number, amount, donor_id_value))
+            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id, cause)
+            VALUES (?, ?, 'Amount Withdraw', ?, ?, ?)
+        """, (str(datetime.now()), account_number, amount, donor_id_value, cause))
         
         conn.commit()
         conn.close()
@@ -289,7 +292,8 @@ def api_transfer():
         receiver_account = int(data.get('receiver_account'))
         amount = int(data.get('amount'))
         sender_account = data.get('account_number')
-        donor_id = data.get('donor_id')  # New parameter for donor_id
+        donor_id = data.get('donor_id')  # Parameter for donor_id
+        cause = data.get('cause')  # New parameter for donation cause
 
         if not all([sender_username, receiver_account, amount, sender_account]) or amount <= 0:
             return jsonify({'success': False, 'message': 'Invalid input data'}), 400
@@ -349,15 +353,15 @@ def api_transfer():
         
         # Sender transaction
         cursor.execute(f"""
-            INSERT INTO {sender_username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
-            VALUES (?, ?, 'Fund Transfer -> {receiver_account}', ?, ?)
-        """, (current_time, sender_account, amount, sender_donor_id))
+            INSERT INTO {sender_username}_transaction (timedate, account_number, transaction_type, amount, donor_id, cause)
+            VALUES (?, ?, 'Fund Transfer -> {receiver_account}', ?, ?, ?)
+        """, (current_time, sender_account, amount, sender_donor_id, cause))
         
         # Receiver transaction
         cursor.execute(f"""
-            INSERT INTO {receiver_username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
-            VALUES (?, ?, 'Fund Transfer From {sender_account}', ?, ?)
-        """, (current_time, receiver_account, amount, receiver_donor_id))
+            INSERT INTO {receiver_username}_transaction (timedate, account_number, transaction_type, amount, donor_id, cause)
+            VALUES (?, ?, 'Fund Transfer From {sender_account}', ?, ?, ?)
+        """, (current_time, receiver_account, amount, receiver_donor_id, cause))
         
         conn.commit()
         conn.close()
@@ -380,7 +384,8 @@ def api_add_money():
             
         account_number = data.get('account_number')
         amount = data.get('amount')
-        donor_id = data.get('donor_id')  # New parameter for donor_id
+        donor_id = data.get('donor_id')  # Parameter for donor_id
+        cause = data.get('cause')  # New parameter for donation cause
 
         if not account_number or not amount:
             return jsonify({'success': False, 'message': 'Account number and amount are required'}), 400
@@ -413,9 +418,9 @@ def api_add_money():
         # Add transaction record
         from datetime import datetime
         cursor.execute(f"""
-            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id)
-            VALUES (?, ?, 'Donation Received', ?, ?)
-        """, (str(datetime.now()), account_number, amount, donor_id_value))
+            INSERT INTO {username}_transaction (timedate, account_number, transaction_type, amount, donor_id, cause)
+            VALUES (?, ?, 'Donation Received', ?, ?, ?)
+        """, (str(datetime.now()), account_number, amount, donor_id_value, cause))
         
         conn.commit()
         conn.close()
@@ -455,7 +460,8 @@ def api_transactions():
                     'account_number': trans['account_number'],
                     'transaction_type': trans['transaction_type'],  # Updated from 'remarks'
                     'amount': trans['amount'],
-                    'donor_id': trans['donor_id']  # Added donor_id to response
+                    'donor_id': trans['donor_id'],  # Added donor_id to response
+                    'cause': trans['cause'] if 'cause' in trans.keys() else None  # Add cause to response
                 })
             
             conn.close()
@@ -567,6 +573,7 @@ def api_epassbook():
                     'transaction_type': trans['transaction_type'],
                     'amount': trans['amount'],
                     'donor_id': trans['donor_id'],
+                    'cause': trans['cause'] if 'cause' in trans.keys() else None,  # Add cause to response
                     # Add additional useful data
                     'transaction_direction': 'credit' if 'Deposit' in trans['transaction_type'] or 'From' in trans['transaction_type'] else 'debit'
                 })
@@ -578,7 +585,7 @@ def api_epassbook():
                 csv_writer = csv.writer(output)
                 
                 # Write header
-                csv_writer.writerow(['Date & Time', 'Account Number', 'Transaction Type', 'Amount', 'Direction', 'Reference ID'])
+                csv_writer.writerow(['Date & Time', 'Account Number', 'Transaction Type', 'Amount', 'Direction', 'Reference ID', 'Cause'])
                 
                 # Write data
                 for trans in transaction_list:
@@ -588,7 +595,8 @@ def api_epassbook():
                         trans['transaction_type'],
                         trans['amount'],
                         trans['transaction_direction'],
-                        trans['donor_id'] or 'N/A'
+                        trans['donor_id'] or 'N/A',
+                        trans['cause'] or 'N/A'
                     ])
                 
                 # Create response

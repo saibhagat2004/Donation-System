@@ -21,14 +21,15 @@ class Bank:
                  f"account_number INTEGER,"
                  f"transaction_type VARCHAR(30),"
                  f"amount INTEGER,"
-                 f"donor_id VARCHAR(64) )")
+                 f"donor_id VARCHAR(64),"
+                 f"cause VARCHAR(50) )")
 
     def balanceequiry(self):
         temp = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
         print(f"{self.__username} Balance is {temp[0][0]}")
 
-    def deposit(self, amount, donor_id=None):
+    def deposit(self, amount, donor_id=None, cause=None):
         temp = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
         test = amount + temp[0][0]
@@ -41,11 +42,12 @@ class Bank:
                  f"'{self.__account_number}',"
                  f"'Amount Deposit',"
                  f"'{amount}',"
-                 f"'{donor_id_value}'"
+                 f"'{donor_id_value}',"
+                 f"'{cause}'"
                  f")")
         print(f"{self.__username} Amount is Sucessfully Depositted into Your Account {self.__account_number}")
 
-    def withdraw(self, amount, donor_id=None):
+    def withdraw(self, amount, donor_id=None, cause=None):
         temp = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
         if amount > temp[0][0]:
@@ -61,12 +63,13 @@ class Bank:
                      f"'{self.__account_number}',"
                      f"'Amount Withdraw',"
                      f"'{amount}',"
-                     f"'{donor_id_value}'"
+                     f"'{donor_id_value}',"
+                     f"'{cause}'"
                      f")")
             print(
                 f"{self.__username} Amount is Sucessfully Withdraw from Your Account {self.__account_number}")
 
-    def fundtransfer(self, receive, amount, donor_id=None):
+    def fundtransfer(self, receive, amount, donor_id=None, cause=None):
         temp = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
         if amount > temp[0][0]:
@@ -101,7 +104,8 @@ class Bank:
                          f"'{self.__account_number}',"
                          f"'Fund Transfer From {self.__account_number}',"
                          f"'{amount}',"
-                         f"'{receiver_donor_id}'"  # Use sender's account as donor_id for receiver
+                         f"'{receiver_donor_id}',"  # Use sender's account as donor_id for receiver
+                         f"'{cause}'"
                          f")")
                          
                 # Sender's transaction record
@@ -110,7 +114,8 @@ class Bank:
                          f"'{self.__account_number}',"
                          f"'Fund Transfer -> {receive}',"
                          f"'{amount}',"
-                         f"'{sender_donor_id}'"  # Use original donor_id for sender's record
+                         f"'{sender_donor_id}',"  # Use original donor_id for sender's record
+                         f"'{cause}'"
                          f")")
                 print(
                     f"{self.__username} Amount is Sucessfully Transaction from Your Account {self.__account_number}")
