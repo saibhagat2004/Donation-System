@@ -79,18 +79,21 @@ const menuItems = {
     { label: "Manage Users", path: "/users" },
     { label: "NGOs", path: "/ngos" },
     { label: "Donations", path: "/donations" },
+    { label: "Blockchain Transparency", path: "/blockchain" },
     { label: "Settings", path: "/settings" },
   ],
   ngo: [
     { label: "My Campaigns", path: "/my-campaigns" },
     { label: "Create Campaign", path: "/create-campaign" },
     { label: "NGO Form", path: "/ngo-form" }, // Matches nested route
+    { label: "Blockchain Transparency", path: "/blockchain" },
     // { label: "Donations", path: "/donations" },
     { label: "Reports", path: "/reports" },
   ],
   donor: [
     { label: "Explore", path: "/explore" },
     { label: "My Donations", path: "/my-donations" },
+    { label: "Blockchain Transparency", path: "/blockchain" },
     { label: "Home", path: "/" },
   ],
 };

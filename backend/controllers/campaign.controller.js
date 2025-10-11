@@ -251,7 +251,7 @@ export const getCampaigns = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const campaigns = await Campaign.find(filter)
-      .populate('created_by', 'fullName email profilePicture')
+      .populate('created_by', 'fullName email profilePicture ngoDetails')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -280,7 +280,7 @@ export const getCampaignById = async (req, res) => {
     const { id } = req.params;
 
     const campaign = await Campaign.findById(id)
-      .populate('created_by', 'fullName email profilePicture')
+      .populate('created_by', 'fullName email profilePicture ngoDetails')
       .populate('donors.user_id', 'fullName profilePicture');
 
     if (!campaign) {

@@ -1,6 +1,5 @@
 // Simplified version of app.js that works with local Ganache
 // without requiring MetaMask
-
 // Global variables
 let provider;
 let signer;

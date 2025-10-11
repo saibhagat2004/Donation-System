@@ -16,6 +16,8 @@ import CampaignDetails from "./pages/Donor/CampaignDetails";
 import DonatePage from "./pages/Donor/DonatePage";
 import MyDonations from "./pages/Donor/MyDonations";
 import DonationReceiptPage from "./pages/DonationReceiptPage";
+import BlockchainTransactions from "./pages/Blockchain/BlockchainTransactions";
+import NgoBlockchainDetails from "./pages/Blockchain/NgoBlockchainDetails";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 function App() {
@@ -82,6 +84,8 @@ function App() {
             <Route path="my-donations" element={<MyDonations />} />
             <Route path="donation-receipt/:orderId" element={<DonationReceiptPage />} />
             <Route path="payment-verification" element={<PaymentVerificationPage />} />
+            <Route path="blockchain" element={<BlockchainTransactions />} />
+            <Route path="blockchain/ngo/:ngoId" element={<NgoBlockchainDetails />} />
           </Route>
 
           {/* Public routes */}

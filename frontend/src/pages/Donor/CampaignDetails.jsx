@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import BlockchainWidget from "../../components/BlockchainWidget";
 
 export default function CampaignDetails() {
   const { id } = useParams();
@@ -86,6 +87,26 @@ export default function CampaignDetails() {
     const diffTime = end - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
+  };
+
+  // Extract NGO bank account from campaign creator and format for blockchain
+  const getNgoBlockchainId = (campaign) => {
+    if (!campaign?.created_by?.ngoDetails?.bank_account) return null;
+    
+    // Get bank account number from NGO details (e.g., "89176024")
+    const bankAccount = campaign.created_by.ngoDetails.bank_account;
+    
+    // Format for blockchain search (e.g., "89176024" -> "NGO_89176024")
+    const blockchainId = `NGO_${bankAccount}`;
+    
+    console.log('Campaign NGO mapping:', {
+      campaignId: campaign._id,
+      ngoName: campaign.created_by.fullName,
+      bankAccount,
+      blockchainId
+    });
+    
+    return blockchainId;
   };
 
   const handleDonate = () => {
@@ -356,6 +377,12 @@ export default function CampaignDetails() {
               )}
             </div>
           </div>
+
+          {/* Blockchain Transparency Widget */}
+          <BlockchainWidget 
+            ngoId={getNgoBlockchainId(campaign)} 
+            showAllTransactions={false}
+          />
         </div>
       </div>
     </div>
