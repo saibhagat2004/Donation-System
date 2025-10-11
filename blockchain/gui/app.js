@@ -529,9 +529,12 @@ async function loadIncomingTransactions(offset, count) {
       table.innerHTML = '';
     }
     
-    const max = Math.min(Number(totalCount.toString()), offset + count);
+    const totalCountNum = Number(totalCount.toString());
+    const startIndex = Math.max(0, totalCountNum - offset - count);
+    const endIndex = totalCountNum - offset;
     
-    for (let i = offset; i < max; i++) {
+    // Load transactions in reverse order (latest first)
+    for (let i = endIndex - 1; i >= startIndex; i--) {
       const donation = await donationContract.getIncomingDonation(i);
       
       const row = document.createElement('tr');
@@ -547,8 +550,8 @@ async function loadIncomingTransactions(offset, count) {
       table.appendChild(row);
     }
     
-    incomingOffset = max;
-    document.getElementById('load-more-incoming').disabled = incomingOffset >= Number(totalCount.toString());
+    incomingOffset = offset + (endIndex - startIndex);
+    document.getElementById('load-more-incoming').disabled = incomingOffset >= totalCountNum;
   } catch (error) {
     console.error('Error loading incoming transactions:', error);
   }
@@ -566,9 +569,12 @@ async function loadOutgoingTransactions(offset, count) {
       table.innerHTML = '';
     }
     
-    const max = Math.min(Number(totalCount.toString()), offset + count);
+    const totalCountNum = Number(totalCount.toString());
+    const startIndex = Math.max(0, totalCountNum - offset - count);
+    const endIndex = totalCountNum - offset;
     
-    for (let i = offset; i < max; i++) {
+    // Load transactions in reverse order (latest first)
+    for (let i = endIndex - 1; i >= startIndex; i--) {
       const tx = await donationContract.getOutgoingTransaction(i);
       
       const row = document.createElement('tr');
@@ -584,8 +590,8 @@ async function loadOutgoingTransactions(offset, count) {
       table.appendChild(row);
     }
     
-    outgoingOffset = max;
-    document.getElementById('load-more-outgoing').disabled = outgoingOffset >= Number(totalCount.toString());
+    outgoingOffset = offset + (endIndex - startIndex);
+    document.getElementById('load-more-outgoing').disabled = outgoingOffset >= totalCountNum;
   } catch (error) {
     console.error('Error loading outgoing transactions:', error);
   }
