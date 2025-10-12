@@ -91,7 +91,8 @@ const CONTRACT_ABI = [
       {"internalType": "string", "name": "receiverId", "type": "string"},
       {"internalType": "string", "name": "cause", "type": "string"},
       {"internalType": "uint256", "name": "amount", "type": "uint256"},
-      {"internalType": "uint256", "name": "timestamp", "type": "uint256"}
+      {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+      {"internalType": "bytes32", "name": "verificationHash", "type": "bytes32"}
     ],
     "stateMutability": "view",
     "type": "function"
@@ -232,6 +233,7 @@ const BlockchainService = {
             cause: transaction[3],
             amount: ethers.formatUnits(transaction[4], 0),
             timestamp: Number(transaction[5]),
+            verificationHash: transaction[6] || null, // Add verification hash from contract
             type: 'outgoing',
             date: new Date(Number(transaction[5]) * 1000)
           });
@@ -240,10 +242,65 @@ const BlockchainService = {
         }
       }
 
+      // Enrich with document metadata from backend
+      if (transactions.length > 0) {
+        try {
+          await this.enrichWithDocumentMetadata(transactions);
+        } catch (enrichError) {
+          console.warn('Failed to enrich with document metadata:', enrichError);
+          // Continue without metadata - not critical
+        }
+      }
+
       return transactions;
     } catch (error) {
       console.error('Error fetching outgoing transactions:', error);
       return [];
+    }
+  },
+
+  async enrichWithDocumentMetadata(transactions) {
+    try {
+      // Extract receiverIds for metadata lookup
+      const receiverIds = transactions.map(tx => tx.receiverId).filter(Boolean);
+      
+      if (receiverIds.length === 0) return;
+
+      // Call backend metadata endpoint
+      const response = await fetch(`/api/bank/blockchain-outgoing-metadata?receiverIds=${receiverIds.join(',')}`);
+      
+      if (!response.ok) {
+        console.warn('Metadata endpoint returned error:', response.status);
+        return;
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Create lookup map by receiverId
+        const metadataMap = {};
+        result.data.forEach(item => {
+          metadataMap[item.receiverId] = item;
+        });
+
+        // Enrich transactions with metadata
+        transactions.forEach(tx => {
+          const metadata = metadataMap[tx.receiverId];
+          if (metadata) {
+            tx.documentUrl = metadata.document_url;
+            tx.documentHash = metadata.document_hash;
+            tx.ngoNotes = metadata.ngo_notes;
+            tx.documentUploadedAt = metadata.document_uploaded_at ? new Date(metadata.document_uploaded_at) : null;
+            tx.transactionId = metadata.transaction_id;
+            tx.hasDocument = !!(metadata.document_url || metadata.document_hash);
+          } else {
+            tx.hasDocument = false;
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error enriching with document metadata:', error);
+      throw error;
     }
   },
 

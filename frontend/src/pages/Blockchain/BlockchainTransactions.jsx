@@ -3,6 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import BlockchainService from '../../services/BlockchainService';
 
+// Utility function to copy to clipboard with toast feedback
+const copyToClipboard = async (text, label = 'Text') => {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard!`);
+  } catch (error) {
+    toast.error('Failed to copy to clipboard');
+  }
+};
+
 export default function BlockchainTransactions() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
@@ -321,6 +331,9 @@ export default function BlockchainTransactions() {
                       Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Verification
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -357,13 +370,50 @@ export default function BlockchainTransactions() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(transaction.date)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <button
-                          onClick={() => viewNgoDetails(transaction.ngoId)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          View NGO
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {transaction.type === 'outgoing' && transaction.verificationHash && transaction.verificationHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' ? (
+                          <div className="flex items-center space-x-2">
+                            <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
+                              {transaction.verificationHash.slice(0, 10)}...{transaction.verificationHash.slice(-8)}
+                            </code>
+                            <button
+                              onClick={() => navigator.clipboard.writeText(transaction.verificationHash)}
+                              className="text-gray-400 hover:text-gray-600"
+                              title="Copy verification hash"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            </button>
+                          </div>
+                        ) : transaction.type === 'outgoing' ? (
+                          <span className="text-gray-400 text-xs">No verification</span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => viewNgoDetails(transaction.ngoId)}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            View NGO
+                          </button>
+                          {transaction.type === 'outgoing' && transaction.hasDocument && transaction.documentUrl && (
+                            <a
+                              href={transaction.documentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-green-600 hover:text-green-800"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              View Receipt
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

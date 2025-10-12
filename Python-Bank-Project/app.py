@@ -347,44 +347,78 @@ def api_withdraw():
         conn.commit()
         conn.close()
 
-        # 🔗 BLOCKCHAIN INTEGRATION: Record withdrawal on blockchain
-        blockchain_result = None
-        blockchain_tx_hash = None
-        blockchain_tx_id = None
+        # � SEND NOTIFICATION TO WEBSITE INSTEAD OF IMMEDIATE BLOCKCHAIN RECORDING
+        notification_result = None
+        notification_sent = False
         
         try:
-            # For withdrawals, we record as spending from the NGO account
-            blockchain_result = blockchain.record_spending_on_blockchain(
-                ngo_account=account_number,
-                receiver_id=donor_id_value or f"cash_withdrawal_{username}",
-                cause=cause or "Cash Withdrawal", 
-                amount=amount
+            import requests
+            
+            # Generate unique transaction ID for tracking
+            bank_transaction_id = f"BANK_WD_{int(datetime.now().timestamp())}_{username}_{amount}"
+            
+            # Send withdrawal notification to website backend
+            notification_payload = {
+                'account_number': account_number,
+                'amount': amount,
+                'transaction_id': bank_transaction_id,
+                'bank_reference': f"REF_{username}_{int(datetime.now().timestamp())}",
+                'cause': cause or "Cash Withdrawal",
+                'description': f"Cash withdrawal of ₹{amount} by {username} from account {account_number}",
+                'withdrawal_type': 'CASH_WITHDRAWAL'
+            }
+            
+            print(f"🔔 Sending withdrawal notification to website:")
+            print(f"   Account: {account_number}")
+            print(f"   Amount: ₹{amount}")
+            print(f"   Transaction ID: {bank_transaction_id}")
+            print(f"   Cause: {cause or 'Cash Withdrawal'}")
+            
+            # Send notification to website backend
+            website_response = requests.post(
+                'http://localhost:5000/api/bank/withdrawal-notification',
+                json=notification_payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=5
             )
             
-            if blockchain_result and blockchain_result['success']:
-                blockchain_tx_hash = blockchain_result.get('tx_hash')
-                blockchain_tx_id = blockchain_result.get('blockchain_tx_id')
-                print(f"✅ Withdrawal recorded on blockchain: {blockchain_tx_hash}")
+            if website_response.status_code in [200, 201]:
+                notification_result = website_response.json()
+                notification_sent = True
+                print(f"✅ Withdrawal notification sent successfully to website")
+                print(f"   NGO will have limited time to upload documents")
+                print(f"   Website transaction ID: {notification_result.get('data', {}).get('transaction_id', 'N/A')}")
             else:
-                print(f"⚠️ Blockchain recording failed for withdrawal: {blockchain_result.get('error') if blockchain_result else 'Unknown error'}")
+                print(f"⚠️ Failed to send notification to website: {website_response.status_code}")
+                notification_result = {
+                    'success': False,
+                    'error': f"Website returned {website_response.status_code}: {website_response.text}"
+                }
                 
-        except Exception as blockchain_error:
-            print(f"❌ Blockchain error during withdrawal: {blockchain_error}")
-            blockchain_result = {
+        except requests.exceptions.RequestException as req_error:
+            print(f"❌ Network error sending notification: {req_error}")
+            notification_result = {
                 'success': False,
-                'error': str(blockchain_error)
+                'error': f"Network error: {str(req_error)}"
+            }
+        except Exception as notification_error:
+            print(f"❌ Error sending withdrawal notification: {notification_error}")
+            notification_result = {
+                'success': False,
+                'error': str(notification_error)
             }
 
         return jsonify({
             'success': True,
-            'message': f'₹{amount} withdrawn successfully!',
+            'message': f'₹{amount} withdrawn successfully! NGO has been notified to upload documentation.',
             'new_balance': new_balance,
-            'blockchain': {
-                'recorded': blockchain_result['success'] if blockchain_result else False,
-                'tx_hash': blockchain_tx_hash,
-                'blockchain_tx_id': blockchain_tx_id,
-                'error': blockchain_result.get('error') if blockchain_result and not blockchain_result['success'] else None
-            }
+            'withdrawal_details': {
+                'bank_transaction_id': bank_transaction_id,
+                'notification_sent': notification_sent,
+                'website_response': notification_result,
+                'ngo_deadline_info': notification_result.get('data') if notification_result and notification_result.get('success') else None
+            },
+            'next_steps': "NGO must upload supporting documents within the specified time limit for blockchain recording"
         })
 
     except Exception as e:
@@ -1046,6 +1080,109 @@ def api_ngo_blockchain_balance(account_number):
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/complete-withdrawal', methods=['POST'])
+def api_complete_withdrawal():
+    """Complete withdrawal transaction with document upload and record on blockchain"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'})
+            
+        account_number = data.get('account_number')
+        amount = data.get('amount')
+        bank_transaction_id = data.get('bank_transaction_id') 
+        document_url = data.get('document_url')
+        document_hash = data.get('document_hash')
+        cause = data.get('cause', 'Cash Withdrawal')
+        
+        if not all([account_number, amount, bank_transaction_id]):
+            return jsonify({
+                'success': False, 
+                'error': 'Account number, amount, and bank transaction ID are required'
+            })
+
+        # Find user by account number
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, balance FROM customers WHERE account_number = ?", (account_number,))
+        user = cursor.fetchone()
+        conn.close()
+
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': f'No user found with account number: {account_number}'
+            })
+
+        username = user['username']
+        
+        print(f"🔗 Completing withdrawal transaction for blockchain recording:")
+        print(f"   Username: {username}")
+        print(f"   Account: {account_number}")
+        print(f"   Amount: ₹{amount}")
+        print(f"   Bank TX ID: {bank_transaction_id}")
+        print(f"   Document URL: {document_url or 'None'}")
+        print(f"   Document Hash: {document_hash or 'None'}")
+
+        # 🔗 BLOCKCHAIN INTEGRATION: Record withdrawal on blockchain NOW
+        blockchain_result = None
+        blockchain_tx_hash = None
+        blockchain_tx_id = None
+        
+        try:
+            # Record withdrawal spending on blockchain
+            print(f"🔗 Recording withdrawal spending on blockchain...")
+            blockchain_result = blockchain.record_spending_on_blockchain(
+                ngo_account=account_number,
+                receiver_id=f"withdrawal_{bank_transaction_id}",
+                cause=cause,
+                amount=amount
+            )
+            
+            if blockchain_result['success']:
+                blockchain_tx_hash = blockchain_result.get('tx_hash')
+                blockchain_tx_id = blockchain_result.get('blockchain_tx_id', blockchain_tx_hash)
+                
+                print(f"✅ Withdrawal recorded on blockchain successfully!")
+                print(f"   Blockchain TX: {blockchain_tx_hash}")
+                print(f"   Block Number: {blockchain_result.get('block_number', 'N/A')}")
+                print(f"   Gas Used: {blockchain_result.get('gas_used', 'N/A')}")
+                
+            else:
+                print(f"❌ Blockchain recording failed: {blockchain_result.get('error', 'Unknown error')}")
+                
+        except Exception as blockchain_error:
+            print(f"❌ Blockchain integration error: {blockchain_error}")
+            blockchain_result = {
+                'success': False,
+                'error': str(blockchain_error)
+            }
+
+        return jsonify({
+            'success': True,
+            'message': f'₹{amount} withdrawal completed and recorded on blockchain!',
+            'data': {
+                'username': username,
+                'account_number': account_number,
+                'amount': amount,
+                'bank_transaction_id': bank_transaction_id,
+                'document_url': document_url,
+                'document_hash': document_hash,
+                'blockchain': {
+                    'recorded': blockchain_result['success'] if blockchain_result else False,
+                    'tx_hash': blockchain_tx_hash,
+                    'blockchain_tx_id': blockchain_tx_id,
+                    'error': blockchain_result.get('error') if blockchain_result and not blockchain_result['success'] else None
+                }
+            }
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to complete withdrawal: {str(e)}'
+        })
 
 if __name__ == '__main__':
     print("Starting Banking Simulation Server...")

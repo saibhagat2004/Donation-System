@@ -13,6 +13,8 @@ import ngoRouter from "./routers/ngo.route.js"
 import donationsRouter from "./routers/donations.route.js"
 import receiptRouter from "./routers/receipt.route.js"
 import testRouter from "./routers/test.route.js"
+import bankRouter from "./routers/bank.route.js"
+import pendingTransactionService from "./services/pendingTransactionService.js"
 
 dotenv.config(); //use to read .env content
 // cloudinary.config(
@@ -50,6 +52,11 @@ app.get('/test-upload', (req, res) => {
     res.sendFile(path.join(__dirname, 'test-upload.html'));
 });
 
+// Serve NGO dashboard for testing bank integration
+app.get('/test-ngo-dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'backend', 'test-ngo-dashboard.html'));
+});
+
 app.use("/api/auth",authRoutes);
 app.use("/api/users",userRouter);
 app.use("/api/cashfreepg",cashfreepgRouter);
@@ -58,6 +65,7 @@ app.use("/api/ngo",ngoRouter);
 app.use("/api/donations",donationsRouter);
 app.use("/api/receipts",receiptRouter);
 app.use("/api/test",testRouter);
+app.use("/api/bank",bankRouter);
 
 // Health check endpoint for Render
 app.get("/api/auth/health", (req, res) => {
@@ -79,4 +87,11 @@ app.get("/api/auth/health", (req, res) => {
 app.listen(PORT,()=>{
     console.log(`server is running on port ${PORT}`);
     connectMongoDB();
+    
+    // Start pending transaction background service
+    setTimeout(() => {
+        pendingTransactionService.start();
+        console.log('🚀 Bank integration services initialized');
+        console.log('📊 Access NGO dashboard at: http://localhost:' + PORT + '/test-ngo-dashboard');
+    }, 2000); // Wait 2 seconds for database connection
 });

@@ -83,6 +83,7 @@ const menuItems = {
     { label: "Settings", path: "/settings" },
   ],
   ngo: [
+    { label: "NGO Dashboard", path: "/ngo-dashboard" },
     { label: "My Campaigns", path: "/my-campaigns" },
     { label: "Create Campaign", path: "/create-campaign" },
     { label: "NGO Form", path: "/ngo-form" }, // Matches nested route

@@ -11,6 +11,7 @@ import PaymentVerificationPage from "./pages/PaymentVerificationPage";
 import NgoForm from "./pages/NGO/AddNGOBeneficiary"; // Example extra page
 import MyCampaigns from "./pages/MyCampaigns";
 import CreateCampaign from "./pages/NGO/CreateCampaign";
+import NGODashboard from "./pages/NGO/NGODashboard";
 import Explore from "./pages/Donor/Explore";
 import CampaignDetails from "./pages/Donor/CampaignDetails";
 import DonatePage from "./pages/Donor/DonatePage";
@@ -66,7 +67,7 @@ function App() {
             {/* Default page with role-based routing */}
             <Route index element={
               authUser?.role === "ngo" ? (
-                <Navigate to="/my-campaigns" replace />
+                <Navigate to="/ngo-dashboard" replace />
               ) : authUser?.role === "donor" ? (
                 <Navigate to="/explore" replace />
               ) : (
@@ -77,6 +78,7 @@ function App() {
             {/* Example additional routes inside layout */}
             <Route path="explore" element={<Explore />} />
             <Route path="ngo-form" element={<NgoForm />} />
+            <Route path="ngo-dashboard" element={<NGODashboard />} />
             <Route path="my-campaigns" element={<MyCampaigns />} />
             <Route path="create-campaign" element={<CreateCampaign />} />
             <Route path="campaign/:id" element={<CampaignDetails />} />
