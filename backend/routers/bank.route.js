@@ -600,6 +600,74 @@ router.get("/blockchain-outgoing-metadata", async (req, res) => {
   }
 });
 
+// Get NGO names by their IDs (account numbers)
+router.get("/ngo-names", async (req, res) => {
+  try {
+    const { ngoIds } = req.query; // Expecting comma-separated ngoIds
+
+    if (!ngoIds) {
+      return res.status(400).json({
+        success: false,
+        message: "NGO IDs are required"
+      });
+    }
+
+    // Parse ngoIds from query parameter
+    const ngoIdArray = ngoIds.split(',').map(id => id.trim());
+    
+    // Convert ngoIds to account numbers (remove "NGO_" prefix if present)
+    const accountNumbers = ngoIdArray.map(ngoId => {
+      // If ngoId starts with "NGO_", remove it, otherwise use as-is
+      return ngoId.startsWith('NGO_') ? ngoId.substring(4) : ngoId;
+    });
+
+    console.log("🔍 Looking up NGO names for account numbers:", accountNumbers);
+
+    // Query User model to find NGOs with matching bank account numbers
+    const ngos = await User.find({
+      'ngoDetails.bank_account': { $in: accountNumbers },
+      role: 'ngo'
+    }, {
+      'ngoDetails.bank_account': 1,
+      'fullName': 1,
+      '_id': 0
+    });
+
+    console.log("📋 Found NGOs:", ngos);
+
+    // Create mapping from original ngoId to fullName
+    const ngoNameMapping = {};
+    
+    ngos.forEach(ngo => {
+      const accountNumber = ngo.ngoDetails.bank_account;
+      const fullName = ngo.fullName;
+      
+      // Find matching ngoId(s) for this account number
+      ngoIdArray.forEach(ngoId => {
+        const cleanNgoId = ngoId.startsWith('NGO_') ? ngoId.substring(4) : ngoId;
+        if (cleanNgoId === accountNumber) {
+          ngoNameMapping[ngoId] = fullName;
+        }
+      });
+    });
+
+    console.log("🏷️ NGO name mapping:", ngoNameMapping);
+
+    res.status(200).json({
+      success: true,
+      data: ngoNameMapping
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching NGO names:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch NGO names",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 export default router;
 
 /**

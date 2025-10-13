@@ -278,8 +278,10 @@ export default function BlockchainTransactions() {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All NGOs ({activeNgos.length} total)</option>
-                {activeNgos.map((ngoId) => (
-                  <option key={ngoId} value={ngoId}>{ngoId}</option>
+                {activeNgos.map((ngo) => (
+                  <option key={ngo.id} value={ngo.id}>
+                    {ngo.fullName ? `${ngo.fullName} (${ngo.id})` : ngo.id}
+                  </option>
                 ))}
               </select>
               
@@ -316,7 +318,7 @@ export default function BlockchainTransactions() {
                       Transaction
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      NGO ID
+                      NGO Details
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Donor/Receiver
@@ -355,7 +357,12 @@ export default function BlockchainTransactions() {
                           onClick={() => viewNgoDetails(transaction.ngoId)}
                           className="text-blue-600 hover:text-blue-800 font-medium"
                         >
-                          {transaction.ngoId}
+                          <div className="flex flex-col items-start">
+                            {transaction.ngoFullName && (
+                              <span className="font-semibold text-gray-900">{transaction.ngoFullName}</span>
+                            )}
+                            <span className={transaction.ngoFullName ? 'text-sm text-gray-500' : ''}>{transaction.ngoId}</span>
+                          </div>
                         </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -433,13 +440,20 @@ export default function BlockchainTransactions() {
           </div>
           <div className="p-6">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {activeNgos.map((ngoId) => (
+              {activeNgos.map((ngo) => (
                 <div
-                  key={ngoId}
+                  key={ngo.id}
                   className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition cursor-pointer"
-                  onClick={() => viewNgoDetails(ngoId)}
+                  onClick={() => viewNgoDetails(ngo.id)}
                 >
-                  <div className="text-sm font-medium text-gray-900 truncate">{ngoId}</div>
+                  <div className="flex flex-col">
+                    {ngo.fullName && (
+                      <div className="text-sm font-semibold text-gray-900 truncate">{ngo.fullName}</div>
+                    )}
+                    <div className={`text-xs ${ngo.fullName ? 'text-gray-500' : 'font-medium text-gray-900'} truncate`}>
+                      {ngo.id}
+                    </div>
+                  </div>
                   <div className="text-xs text-blue-600 mt-1">View Details →</div>
                 </div>
               ))}

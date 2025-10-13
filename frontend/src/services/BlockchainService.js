@@ -207,6 +207,16 @@ const BlockchainService = {
         }
       }
 
+      // Enrich with NGO names from backend
+      if (transactions.length > 0) {
+        try {
+          await this.enrichWithNgoNames(transactions);
+        } catch (enrichError) {
+          console.warn('Failed to enrich incoming transactions with NGO names:', enrichError);
+          // Continue without names - not critical
+        }
+      }
+
       return transactions;
     } catch (error) {
       console.error('Error fetching incoming transactions:', error);
@@ -242,12 +252,13 @@ const BlockchainService = {
         }
       }
 
-      // Enrich with document metadata from backend
+      // Enrich with document metadata and NGO names from backend
       if (transactions.length > 0) {
         try {
           await this.enrichWithDocumentMetadata(transactions);
+          await this.enrichWithNgoNames(transactions);
         } catch (enrichError) {
-          console.warn('Failed to enrich with document metadata:', enrichError);
+          console.warn('Failed to enrich with metadata:', enrichError);
           // Continue without metadata - not critical
         }
       }
@@ -300,6 +311,40 @@ const BlockchainService = {
       }
     } catch (error) {
       console.error('Error enriching with document metadata:', error);
+      throw error;
+    }
+  },
+
+  async enrichWithNgoNames(transactions) {
+    try {
+      // Extract unique ngoIds for name lookup
+      const ngoIds = [...new Set(transactions.map(tx => tx.ngoId).filter(Boolean))];
+      
+      if (ngoIds.length === 0) return;
+
+      // Call backend NGO names endpoint
+      const response = await fetch(`/api/bank/ngo-names?ngoIds=${ngoIds.join(',')}`);
+      
+      if (!response.ok) {
+        console.warn('NGO names endpoint returned error:', response.status);
+        return;
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Enrich transactions with NGO full names
+        transactions.forEach(tx => {
+          const ngoFullName = result.data[tx.ngoId];
+          if (ngoFullName) {
+            tx.ngoFullName = ngoFullName;
+          }
+        });
+        
+        console.log('✅ Enriched transactions with NGO names:', Object.keys(result.data).length, 'NGOs found');
+      }
+    } catch (error) {
+      console.error('Error enriching with NGO names:', error);
       throw error;
     }
   },
@@ -364,7 +409,31 @@ const BlockchainService = {
       if (!this.contract) throw new Error('Contract not initialized');
       
       const ngoIds = await this.contract.getActiveNgoIds(limit);
-      return ngoIds.map(id => id.trim()).filter(id => id);
+      const cleanNgoIds = ngoIds.map(id => id.trim()).filter(id => id);
+      
+      // Enrich with NGO names if we have any IDs
+      if (cleanNgoIds.length > 0) {
+        try {
+          const response = await fetch(`/api/bank/ngo-names?ngoIds=${cleanNgoIds.join(',')}`);
+          
+          if (response.ok) {
+            const result = await response.json();
+            
+            if (result.success && result.data) {
+              // Return objects with both ID and name
+              return cleanNgoIds.map(ngoId => ({
+                id: ngoId,
+                fullName: result.data[ngoId] || null
+              }));
+            }
+          }
+        } catch (enrichError) {
+          console.warn('Failed to enrich active NGOs with names:', enrichError);
+        }
+      }
+      
+      // Fallback: return just IDs as objects for consistency
+      return cleanNgoIds.map(ngoId => ({ id: ngoId, fullName: null }));
     } catch (error) {
       console.error('Error fetching active NGOs:', error);
       return [];
