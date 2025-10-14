@@ -334,7 +334,7 @@ export default function NgoBlockchainDetails() {
                   <p className="text-sm font-medium text-green-600">Total Bank Deposits</p>
                   <p className="text-xl font-bold text-green-800">
                     {formatCurrency(
-                      incomingTransactions.reduce((sum, tx) => sum + tx.amount, 0)
+                      incomingTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0)
                     )}
                   </p>
                   <p className="text-xs text-gray-500">Money received in bank account</p>
@@ -353,7 +353,7 @@ export default function NgoBlockchainDetails() {
                   <p className="text-sm font-medium text-red-600">Total Bank Withdrawals</p>
                   <p className="text-xl font-bold text-red-800">
                     {formatCurrency(
-                      outgoingTransactions.reduce((sum, tx) => sum + tx.amount, 0)
+                      outgoingTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0)
                     )}
                   </p>
                   <p className="text-xs text-gray-500">Money spent from bank account</p>
