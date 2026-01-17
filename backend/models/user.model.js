@@ -58,10 +58,33 @@ const userSchema = new mongoose.Schema(
       },
       default: undefined
     },
+    // Reputation & feedback tracking for NGOs
+    reputation: {
+      thumbsUpCount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      redFlagCount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      totalFeedbackCount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      reputationScore: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100
+      }
+    }
   },
   { timestamps: true }
 );
 
 const User = mongoose.model("User", userSchema);
-
 export default User;

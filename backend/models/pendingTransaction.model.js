@@ -142,6 +142,69 @@ const pendingTransactionSchema = new mongoose.Schema(
       maxLength: 500
     },
     
+    // Public feedback from donors/users
+    feedback: [{
+      user_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+      },
+      user_name: {
+        type: String,
+        trim: true
+      },
+      rating_type: {
+        type: String,
+        enum: ["THUMBS_UP", "RED_FLAG"],
+        required: true
+      },
+      comment: {
+        type: String,
+        trim: true,
+        maxLength: 500
+      },
+      reason: {
+        type: String,
+        enum: [
+          "PROOF_APPROPRIATE",
+          "PROOF_INSUFFICIENT",
+          "PROOF_FAKE",
+          "SUSPICIOUS_ACTIVITY",
+          "GOOD_TRANSPARENCY",
+          "WELL_DOCUMENTED",
+          "OTHER"
+        ],
+        trim: true
+      },
+      created_at: {
+        type: Date,
+        default: Date.now
+      },
+      ip_address: {
+        type: String,
+        trim: true
+      }
+    }],
+    
+    // Feedback statistics
+    feedback_stats: {
+      thumbs_up_count: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      red_flag_count: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      total_feedback_count: {
+        type: Number,
+        default: 0,
+        min: 0
+      }
+    },
+    
     // Expiry handling
     expired_at: {
       type: Date
@@ -188,9 +251,9 @@ pendingTransactionSchema.pre('save', function(next) {
     this.transaction_id = `PWT_${timestamp}_${randomId}`;
   }
   
-  // Set document upload deadline (3 minutes from creation for demo, 1 day for production)
+  // Set document upload deadline (1.5 minutes from creation for demo, 1 day for production)
   if (this.isNew && !this.document_upload_deadline) {
-    const uploadWindow = process.env.NODE_ENV === 'production' ? 24 * 60 * 60 * 1000 : 3 * 60 * 1000; // 24 hours or 3 minutes
+    const uploadWindow = process.env.NODE_ENV === 'production' ? 24 * 60 * 60 * 1000 : 90 * 1000; // 24 hours or 90 seconds (1.5 minutes)
     this.document_upload_deadline = new Date(Date.now() + uploadWindow);
   }
   
@@ -205,6 +268,18 @@ pendingTransactionSchema.pre('save', function(next) {
     this.status = 'EXPIRED';
     this.expired_at = new Date();
     this.expiry_reason = 'TIMEOUT';
+  }
+  
+  // Update feedback statistics
+  if (this.feedback && this.feedback.length > 0) {
+    const thumbsUpCount = this.feedback.filter(f => f.rating_type === 'THUMBS_UP').length;
+    const redFlagCount = this.feedback.filter(f => f.rating_type === 'RED_FLAG').length;
+    
+    this.feedback_stats = {
+      thumbs_up_count: thumbsUpCount,
+      red_flag_count: redFlagCount,
+      total_feedback_count: this.feedback.length
+    };
   }
   
   next();
@@ -277,6 +352,80 @@ pendingTransactionSchema.statics.countPendingForNgo = function(ngoId) {
     ngo_id: ngoId,
     status: 'PENDING'
   });
+};
+
+// Add feedback to a transaction
+pendingTransactionSchema.methods.addFeedback = async function(userId, userName, ratingType, comment, reason, ipAddress) {
+  // Check if user already gave feedback
+  const existingFeedback = this.feedback.find(f => f.user_id.toString() === userId.toString());
+  
+  if (existingFeedback) {
+    throw new Error('User has already provided feedback for this transaction');
+  }
+  
+  // Add new feedback
+  this.feedback.push({
+    user_id: userId,
+    user_name: userName,
+    rating_type: ratingType,
+    comment: comment,
+    reason: reason,
+    ip_address: ipAddress,
+    created_at: new Date()
+  });
+  
+  await this.save();
+  
+  // Update NGO reputation
+  await this.updateNgoReputation();
+  
+  return this;
+};
+
+// Update NGO reputation based on all their transactions
+pendingTransactionSchema.methods.updateNgoReputation = async function() {
+  try {
+    const User = mongoose.model('User');
+    
+    // Get all transactions for this NGO
+    const allTransactions = await this.constructor.find({ ngo_id: this.ngo_id });
+    
+    // Calculate total feedback across all transactions
+    let totalThumbsUp = 0;
+    let totalRedFlags = 0;
+    let totalFeedback = 0;
+    
+    allTransactions.forEach(transaction => {
+      if (transaction.feedback_stats) {
+        totalThumbsUp += transaction.feedback_stats.thumbs_up_count || 0;
+        totalRedFlags += transaction.feedback_stats.red_flag_count || 0;
+        totalFeedback += transaction.feedback_stats.total_feedback_count || 0;
+      }
+    });
+    
+    // Calculate reputation score (0-100)
+    let reputationScore = 0;
+    if (totalFeedback > 0) {
+      reputationScore = Math.round((totalThumbsUp / totalFeedback) * 100);
+    }
+    
+    // Update NGO user record
+    await User.findByIdAndUpdate(
+      this.ngo_id,
+      {
+        reputation: {
+          thumbsUpCount: totalThumbsUp,
+          redFlagCount: totalRedFlags,
+          totalFeedbackCount: totalFeedback,
+          reputationScore: reputationScore
+        }
+      }
+    );
+    
+    console.log(`✅ Updated reputation for NGO ${this.ngo_id}: Score ${reputationScore}%`);
+  } catch (error) {
+    console.error('❌ Error updating NGO reputation:', error);
+  }
 };
 
 const PendingTransaction = mongoose.model("PendingTransaction", pendingTransactionSchema);

@@ -77,15 +77,20 @@ class PendingTransactionService {
 
       console.log(`⏰ Processing ${expiredTransactions.length} expired transactions...`);
 
+
       for (const transaction of expiredTransactions) {
+        // Update status to EXPIRED
         await PendingTransaction.findByIdAndUpdate(transaction._id, {
           status: 'EXPIRED',
           expired_at: new Date(),
           expiry_reason: 'TIMEOUT'
         });
 
-        // Record to blockchain without document
-        await this.recordToBlockchain(transaction, null);
+        // Re-fetch the updated transaction to ensure status and fields are current
+        const updatedTransaction = await PendingTransaction.findById(transaction._id);
+
+        // Record to blockchain without document (expired)
+        await this.recordToBlockchain(updatedTransaction, null);
       }
 
       console.log(`✅ Marked ${expiredTransactions.length} transactions as expired`);
@@ -127,66 +132,51 @@ class PendingTransactionService {
     try {
       console.log(`🔗 Recording transaction ${transaction.transaction_id} to blockchain...`);
       
-      // Try to integrate with actual blockchain service
-      let blockchainResponse = null;
+      // 🚀 SEND TO PYTHON BANK FOR BLOCKCHAIN RECORDING (same as upload flow)
+      console.log(`🏦 Sending to Python bank for blockchain recording...`);
       
-      try {
-        // Import blockchain integration
-        const { default: blockchainService } = await import('../utils/blockchainIntegration.js');
-        
-        // Record spending on blockchain
-        blockchainResponse = await blockchainService.recordSpending({
-          ngo_account: transaction.ngo_account_number,
-          receiver_id: `withdrawal_${transaction.transaction_id}`,
-          cause: transaction.cause || 'Cash Withdrawal',
+      const bankResponse = await fetch('http://localhost:5050/api/complete-withdrawal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account_number: transaction.ngo_account_number,
           amount: transaction.amount,
-          verification_hash: verificationHash || '0x0'
-        });
-        
-      } catch (blockchainError) {
-        console.log(`⚠️ Blockchain service not available, using simulation: ${blockchainError.message}`);
-        // Fall back to simulation
-        blockchainResponse = await this.simulateBlockchainRecording(transaction, verificationHash);
-      }
-      
-      if (blockchainResponse && blockchainResponse.success) {
-        await PendingTransaction.findByIdAndUpdate(transaction._id, {
-          status: 'RECORDED',
-          blockchain_tx_id: blockchainResponse.tx_id || blockchainResponse.blockchain_tx_id,
-          blockchain_recorded_at: new Date()
-        });
+          bank_transaction_id: transaction.bank_transaction_id || transaction.transaction_id,
+          document_url: verificationHash ? transaction.document_url : null, // No document for expired
+          document_hash: verificationHash || null, // No hash for expired
+          cause: transaction.cause || 'Cash Withdrawal'
+        })
+      });
 
-        console.log(`✅ Transaction ${transaction.transaction_id} recorded on blockchain`);
-        console.log(`   Blockchain TX: ${blockchainResponse.tx_id || blockchainResponse.blockchain_tx_id}`);
-        console.log(`   Amount: ₹${transaction.amount}`);
-        console.log(`   Document: ${verificationHash ? 'Provided' : 'Not provided'}`);
-        console.log(`   Document URL: ${transaction.document_url || 'None'}`);
+      if (bankResponse.ok) {
+        const bankResult = await bankResponse.json();
+        
+        if (bankResult.success && bankResult.data.blockchain.recorded) {
+          // Update transaction with blockchain details from bank
+          await PendingTransaction.findByIdAndUpdate(transaction._id, {
+            status: 'RECORDED',
+            blockchain_tx_id: bankResult.data.blockchain.blockchain_tx_id || bankResult.data.blockchain.tx_hash,
+            blockchain_recorded_at: new Date()
+          });
+
+          console.log(`✅ BANK: Transaction ${transaction.transaction_id} recorded on blockchain!`);
+          console.log(`   Blockchain TX: ${bankResult.data.blockchain.blockchain_tx_id || bankResult.data.blockchain.tx_hash}`);
+          console.log(`   Amount: ₹${transaction.amount}`);
+          console.log(`   Document: ${verificationHash ? 'Provided' : 'Not provided (expired)'}`);
+          console.log(`   Document URL: ${transaction.document_url || 'None'}`);
+        } else {
+          console.log(`⚠️ BANK: Blockchain recording failed at bank level`);
+          console.log(`   Bank Error: ${bankResult.data?.blockchain?.error || 'Unknown error'}`);
+        }
       } else {
-        console.error(`❌ Failed to record transaction ${transaction.transaction_id} on blockchain:`, blockchainResponse?.error || 'Unknown error');
+        console.log(`⚠️ BANK: Failed to communicate with Python bank: ${bankResponse.status}`);
       }
 
     } catch (error) {
       console.error(`❌ Error recording transaction ${transaction.transaction_id} to blockchain:`, error);
     }
-  }
-
-  /**
-   * Simulate blockchain recording (replace with actual blockchain integration)
-   */
-  async simulateBlockchainRecording(transaction, verificationHash) {
-    // TODO: Replace with actual blockchain integration
-    // For now, simulate successful recording
-    
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          tx_id: `BLOCKCHAIN_TX_${Date.now()}_${Math.random().toString(36).substring(2)}`,
-          block_number: Math.floor(Math.random() * 1000000),
-          gas_used: Math.floor(Math.random() * 100000) + 50000
-        });
-      }, 1000); // Simulate network delay
-    });
   }
 
   /**

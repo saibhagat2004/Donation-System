@@ -2,6 +2,21 @@
 
 A full-stack MERN application for managing donations and campaigns.
 
+
+### Scripts TO run locally
+- `npm run dev`: Start development servers (both frontend and backend)
+- `node server.js`: to start blockchain
+- `python3 app.py`: to start bank
+- `on Ganache also `
+
+## shortcut to run at once
+-`Press Ctrl+Shift+P`
+-`Type "Tasks: Run Task"`
+-`Select "Start All Services"`
+
+
+
+
 ## Project Structure
 
 - **Frontend**: React with Vite, TailwindCSS
@@ -82,6 +97,9 @@ A full-stack MERN application for managing donations and campaigns.
 - **Authentication**: JWT, bcryptjs
 - **Payment**: Cashfree Payment Gateway
 - **File Upload**: Cloudinary for image storage and optimization
+
+
+
 
 ### Scripts
 - `npm run dev`: Start development servers (both frontend and backend)

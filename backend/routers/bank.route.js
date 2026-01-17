@@ -621,8 +621,6 @@ router.get("/ngo-names", async (req, res) => {
       return ngoId.startsWith('NGO_') ? ngoId.substring(4) : ngoId;
     });
 
-    console.log("🔍 Looking up NGO names for account numbers:", accountNumbers);
-
     // Query User model to find NGOs with matching bank account numbers
     const ngos = await User.find({
       'ngoDetails.bank_account': { $in: accountNumbers },
@@ -632,8 +630,6 @@ router.get("/ngo-names", async (req, res) => {
       'fullName': 1,
       '_id': 0
     });
-
-    console.log("📋 Found NGOs:", ngos);
 
     // Create mapping from original ngoId to fullName
     const ngoNameMapping = {};
@@ -650,8 +646,6 @@ router.get("/ngo-names", async (req, res) => {
         }
       });
     });
-
-    console.log("🏷️ NGO name mapping:", ngoNameMapping);
 
     res.status(200).json({
       success: true,
