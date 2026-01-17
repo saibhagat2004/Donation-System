@@ -171,12 +171,13 @@ export default function ReceiptDetails() {
             <div className="bg-gray-50 border rounded p-3 mt-1 text-gray-800 whitespace-pre-line">{transaction.description}</div>
           </div>
         )}
-        {transaction.verificationHash && transaction.verificationHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
+        {/* Verification Hash - Commented out for better UX */}
+        {/* {transaction.verificationHash && transaction.verificationHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
           <div className="mb-4">
             <span className="font-semibold text-gray-700">Verification Hash:</span>
             <code className="block bg-gray-100 px-2 py-1 rounded font-mono text-xs text-gray-700 mt-1">{transaction.verificationHash}</code>
           </div>
-        )}
+        )} */}
       </div>
 
       {/* Feedback Statistics */}

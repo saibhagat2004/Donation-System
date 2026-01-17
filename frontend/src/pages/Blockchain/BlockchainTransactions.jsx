@@ -30,6 +30,20 @@ export default function BlockchainTransactions() {
 
   const initializeBlockchain = async () => {
     try {
+      // Check if already connected to avoid re-initialization
+      const currentStatus = await BlockchainService.getConnectionStatus();
+      
+      if (currentStatus.connected) {
+        // Already connected, just fetch the data without showing loading screen
+        setBlockchainStatus(currentStatus);
+        await Promise.all([
+          fetchAllTransactions(),
+          fetchActiveNgos()
+        ]);
+        return;
+      }
+      
+      // Not connected, show loading and perform full initialization
       setIsLoading(true);
       const initialized = await BlockchainService.initialize();
       
@@ -378,8 +392,8 @@ export default function BlockchainTransactions() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(transaction.date)}
                       </td>
-                      {/* Temporarily hidden verification field */}
-                      {/* <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {/* Temporarily hidden verification field - Verification Hash column
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {transaction.type === 'outgoing' && transaction.verificationHash && transaction.verificationHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' ? (
                           <div className="flex items-center space-x-2">
                             <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
@@ -400,7 +414,8 @@ export default function BlockchainTransactions() {
                         ) : (
                           <span className="text-gray-400 text-xs">-</span>
                         )}
-                      </td> */}
+                      </td>
+                      */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <div className="flex items-center space-x-2">
                           <button

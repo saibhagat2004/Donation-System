@@ -222,7 +222,8 @@ export default function BlockchainWidget({ ngoId = null, showAllTransactions = f
                     </a>
                   )}
                 </div>
-                {tx.type === 'outgoing' && tx.verificationHash && tx.verificationHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
+                {/* Verification Hash - Commented out for better UX */}
+                {/* {tx.type === 'outgoing' && tx.verificationHash && tx.verificationHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
                   <div className="mt-1 pt-1 border-t border-gray-100">
                     <div className="flex items-center">
                       <span className="text-gray-500 text-xs mr-1">Hash:</span>
@@ -240,7 +241,7 @@ export default function BlockchainWidget({ ngoId = null, showAllTransactions = f
                       </button>
                     </div>
                   </div>
-                )}
+                )} */}
               </div>
             ))}
           </div>

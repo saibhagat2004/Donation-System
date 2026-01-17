@@ -139,6 +139,29 @@ const CONFIG = {
 const BlockchainService = {
   provider: null,
   contract: null,
+  cache: {
+    transactions: null,
+    incomingTransactions: null,
+    outgoingTransactions: null,
+    activeNgos: null,
+    status: null,
+    lastFetch: null,
+    CACHE_DURATION: 5 * 60 * 1000 // 5 minutes cache
+  },
+
+  isCacheValid() {
+    if (!this.cache.lastFetch) return false;
+    return (Date.now() - this.cache.lastFetch) < this.cache.CACHE_DURATION;
+  },
+
+  clearCache() {
+    this.cache.transactions = null;
+    this.cache.incomingTransactions = null;
+    this.cache.outgoingTransactions = null;
+    this.cache.activeNgos = null;
+    this.cache.status = null;
+    this.cache.lastFetch = null;
+  },
 
   async initialize() {
     try {
@@ -166,15 +189,23 @@ const BlockchainService = {
     try {
       if (!this.provider) return { connected: false, error: 'Provider not initialized' };
       
+      // Return cached status if valid
+      if (this.isCacheValid() && this.cache.status) {
+        return this.cache.status;
+      }
+      
       const blockNumber = await this.provider.getBlockNumber();
       const totalDonations = await this.contract.totalDonations();
       
-      return {
+      const status = {
         connected: true,
         blockNumber,
         totalDonations: ethers.formatUnits(totalDonations, 0),
         contractAddress: CONFIG.CONTRACT_ADDRESS
       };
+      
+      this.cache.status = status;
+      return status;
     } catch (error) {
       return { connected: false, error: error.message };
     }
@@ -183,6 +214,11 @@ const BlockchainService = {
   async getAllIncomingTransactions(limit = 50) {
     try {
       if (!this.contract) throw new Error('Contract not initialized');
+
+      // Return cached data if valid
+      if (this.isCacheValid() && this.cache.incomingTransactions) {
+        return this.cache.incomingTransactions;
+      }
 
       const totalCount = await this.contract.getIncomingDonationsCount();
       const count = Math.min(Number(totalCount), limit);
@@ -217,6 +253,10 @@ const BlockchainService = {
         }
       }
 
+      // Cache the result
+      this.cache.incomingTransactions = transactions;
+      this.cache.lastFetch = Date.now();
+
       return transactions;
     } catch (error) {
       console.error('Error fetching incoming transactions:', error);
@@ -227,6 +267,11 @@ const BlockchainService = {
   async getAllOutgoingTransactions(limit = 50) {
     try {
       if (!this.contract) throw new Error('Contract not initialized');
+
+      // Return cached data if valid
+      if (this.isCacheValid() && this.cache.outgoingTransactions) {
+        return this.cache.outgoingTransactions;
+      }
 
       const totalCount = await this.contract.getOutgoingTransactionsCount();
       const count = Math.min(Number(totalCount), limit);
@@ -262,6 +307,10 @@ const BlockchainService = {
           // Continue without metadata - not critical
         }
       }
+
+      // Cache the result
+      this.cache.outgoingTransactions = transactions;
+      this.cache.lastFetch = Date.now();
 
       return transactions;
     } catch (error) {
@@ -408,8 +457,15 @@ const BlockchainService = {
     try {
       if (!this.contract) throw new Error('Contract not initialized');
       
+      // Return cached data if valid
+      if (this.isCacheValid() && this.cache.activeNgos) {
+        return this.cache.activeNgos;
+      }
+      
       const ngoIds = await this.contract.getActiveNgoIds(limit);
       const cleanNgoIds = ngoIds.map(id => id.trim()).filter(id => id);
+      
+      let result;
       
       // Enrich with NGO names if we have any IDs
       if (cleanNgoIds.length > 0) {
@@ -417,13 +473,13 @@ const BlockchainService = {
           const response = await fetch(`/api/bank/ngo-names?ngoIds=${cleanNgoIds.join(',')}`);
           
           if (response.ok) {
-            const result = await response.json();
+            const apiResult = await response.json();
             
-            if (result.success && result.data) {
+            if (apiResult.success && apiResult.data) {
               // Return objects with both ID and name
-              return cleanNgoIds.map(ngoId => ({
+              result = cleanNgoIds.map(ngoId => ({
                 id: ngoId,
-                fullName: result.data[ngoId] || null
+                fullName: apiResult.data[ngoId] || null
               }));
             }
           }
@@ -433,7 +489,15 @@ const BlockchainService = {
       }
       
       // Fallback: return just IDs as objects for consistency
-      return cleanNgoIds.map(ngoId => ({ id: ngoId, fullName: null }));
+      if (!result) {
+        result = cleanNgoIds.map(ngoId => ({ id: ngoId, fullName: null }));
+      }
+      
+      // Cache the result
+      this.cache.activeNgos = result;
+      this.cache.lastFetch = Date.now();
+      
+      return result;
     } catch (error) {
       console.error('Error fetching active NGOs:', error);
       return [];
