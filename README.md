@@ -1,6 +1,6 @@
 # Donation System
 
-A full-stack MERN application for managing donations and campaigns.
+A full-stack MERN application for managing donations and campaigns. HI
 
 
 ### Scripts TO run locally
