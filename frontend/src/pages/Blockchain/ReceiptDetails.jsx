@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useQuery } from '@tanstack/react-query';
 
 export default function ReceiptDetails() {
   const location = useLocation();
   const navigate = useNavigate();
   const transaction = location.state?.transaction;
+  
+  // Get authenticated user from cache (already fetched in App.jsx)
+  const { data: authUser } = useQuery({ queryKey: ['authUser'] });
   
   const [feedback, setFeedback] = useState([]);
   const [feedbackStats, setFeedbackStats] = useState({
@@ -25,15 +29,17 @@ export default function ReceiptDetails() {
   useEffect(() => {
     if (transaction && (transaction._id || transaction.id)) {
       fetchFeedback();
-      checkUserFeedback();
+      if (authUser) {
+        checkUserFeedback();
+      }
     }
-  }, [transaction]);
+  }, [transaction, authUser]);
 
   const fetchFeedback = async () => {
     try {
-      // Use _id for MongoDB documents, or id for other types
+      // Use _id for MongoDB documents, or id for blockchain transactions
       const transactionId = transaction._id || transaction.id;
-      const response = await fetch(`http://localhost:5000/api/feedback/transaction/${transactionId}`);
+      const response = await fetch(`/api/feedback/transaction/${transactionId}`);
       const data = await response.json();
       
       if (data.success) {
@@ -47,16 +53,11 @@ export default function ReceiptDetails() {
 
   const checkUserFeedback = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+      if (!authUser) return;
 
       // Use _id for MongoDB documents, or id for other types
       const transactionId = transaction._id || transaction.id;
-      const response = await fetch(`http://localhost:5000/api/feedback/transaction/${transactionId}/check`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await fetch(`/api/feedback/transaction/${transactionId}/check`);
       const data = await response.json();
       
       if (data.success) {
@@ -77,8 +78,7 @@ export default function ReceiptDetails() {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
+      if (!authUser) {
         toast.error('Please login to provide feedback');
         navigate('/login');
         return;
@@ -86,11 +86,10 @@ export default function ReceiptDetails() {
 
       // Use _id for MongoDB documents, or id for other types
       const transactionId = transaction._id || transaction.id;
-      const response = await fetch(`http://localhost:5000/api/feedback/transaction/${transactionId}`, {
+      const response = await fetch(`/api/feedback/transaction/${transactionId}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           ratingType,
@@ -204,8 +203,18 @@ export default function ReceiptDetails() {
           </div>
         </div>
 
-        {/* Add Feedback Button */}
-        {transaction.documentUrl && !hasFeedback && (
+        {/* Not logged in message */}
+        {!authUser && transaction.documentUrl && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center gap-2 text-yellow-800">
+              <span>🔒</span>
+              <span>Please <button onClick={() => navigate('/login')} className="underline font-semibold hover:text-yellow-900">login</button> to provide feedback on this receipt</span>
+            </div>
+          </div>
+        )}
+
+        {/* Add Feedback Button - only for authenticated users */}
+        {authUser && transaction.documentUrl && !hasFeedback && (
           <div className="mb-6">
             <button
               onClick={() => setShowFeedbackForm(!showFeedbackForm)}
@@ -216,7 +225,7 @@ export default function ReceiptDetails() {
           </div>
         )}
 
-        {hasFeedback && (
+        {authUser && hasFeedback && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
             ✓ You have already provided feedback for this transaction
           </div>

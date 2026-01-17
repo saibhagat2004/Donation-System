@@ -2,14 +2,22 @@ import PendingTransaction from "../models/pendingTransaction.model.js";
 import User from "../models/user.model.js";
 import mongoose from "mongoose";
 
-// Helper function to find transaction by ID or transaction_id
+// Helper function to find transaction by ID or transaction_id or blockchain_tx_id
 const findTransaction = async (transactionId) => {
   // Check if it's a valid MongoDB ObjectId
   if (mongoose.Types.ObjectId.isValid(transactionId) && transactionId.length === 24) {
     return await PendingTransaction.findById(transactionId);
   }
-  // Otherwise, search by transaction_id field
-  return await PendingTransaction.findOne({ transaction_id: transactionId });
+  
+  // Try to find by transaction_id field (e.g., "PWT_1735383600000_ABC123")
+  let transaction = await PendingTransaction.findOne({ transaction_id: transactionId });
+  
+  // If not found, try to find by blockchain_tx_id (e.g., "95")
+  if (!transaction) {
+    transaction = await PendingTransaction.findOne({ blockchain_tx_id: transactionId });
+  }
+  
+  return transaction;
 };
 
 // Add feedback to a transaction
@@ -98,10 +106,17 @@ export const getTransactionFeedback = async (req, res) => {
       await transaction.populate('feedback.user_id', 'fullName profilePicture');
     }
 
+    // If transaction not found (e.g., blockchain-only transaction), return empty feedback
     if (!transaction) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Transaction not found" 
+      return res.status(200).json({ 
+        success: true,
+        feedback: [],
+        stats: {
+          thumbs_up_count: 0,
+          red_flag_count: 0,
+          total_feedback_count: 0
+        },
+        message: "Transaction not found in database. Feedback not available for this transaction."
       });
     }
 
@@ -213,10 +228,13 @@ export const checkUserFeedback = async (req, res) => {
     // Find transaction by _id or transaction_id
     const transaction = await findTransaction(transactionId);
 
+    // If transaction not found (e.g., blockchain-only transaction), return no feedback
     if (!transaction) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Transaction not found" 
+      return res.status(200).json({ 
+        success: true,
+        hasFeedback: false,
+        feedback: null,
+        message: "Transaction not found in database"
       });
     }
 
