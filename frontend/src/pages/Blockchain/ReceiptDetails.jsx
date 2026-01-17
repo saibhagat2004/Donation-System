@@ -135,19 +135,24 @@ export default function ReceiptDetails() {
       <h2 className="text-2xl font-bold mb-6">Receipt Details</h2>
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="mb-4">
-          <span className="font-semibold text-gray-700">Transaction ID:</span> <span className="text-gray-900">{transaction.id}</span>
+          <span className="font-semibold text-gray-700">Transaction ID:</span> <span className="text-gray-900">{transaction.id || 'N/A'}</span>
         </div>
         <div className="mb-4">
-          <span className="font-semibold text-gray-700">NGO:</span> <span className="text-gray-900">{transaction.ngoFullName || transaction.ngoId}</span>
+          <span className="font-semibold text-gray-700">NGO:</span> <span className="text-gray-900">
+            {transaction.ngoFullName || 
+             (typeof transaction.ngoId === 'string' ? transaction.ngoId : 'Unknown NGO')}
+          </span>
         </div>
         <div className="mb-4">
-          <span className="font-semibold text-gray-700">Amount:</span> <span className="text-gray-900">₹{transaction.amount}</span>
+          <span className="font-semibold text-gray-700">Amount:</span> <span className="text-gray-900">₹{transaction.amount || 0}</span>
         </div>
         <div className="mb-4">
-          <span className="font-semibold text-gray-700">Cause:</span> <span className="text-gray-900">{transaction.cause}</span>
+          <span className="font-semibold text-gray-700">Cause:</span> <span className="text-gray-900">{transaction.cause || 'N/A'}</span>
         </div>
         <div className="mb-4">
-          <span className="font-semibold text-gray-700">Date:</span> <span className="text-gray-900">{new Date(transaction.date).toLocaleString('en-IN')}</span>
+          <span className="font-semibold text-gray-700">Date:</span> <span className="text-gray-900">
+            {transaction.date ? new Date(transaction.date).toLocaleString('en-IN') : 'N/A'}
+          </span>
         </div>
         {transaction.ngoNotes && (
           <div className="mb-4">
@@ -321,7 +326,9 @@ export default function ReceiptDetails() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900">{fb.user_name || 'Anonymous'}</span>
+                        <span className="font-medium text-gray-900">
+                          {fb.user_id?.fullName || fb.user_name || 'Anonymous'}
+                        </span>
                         <span className="text-xs text-gray-500">
                           {new Date(fb.created_at).toLocaleDateString('en-IN')}
                         </span>
