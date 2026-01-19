@@ -76,8 +76,8 @@ import { useQueryClient } from "@tanstack/react-query";
 const menuItems = {
   admin: [
     { label: "Dashboard", path: "/" },
-    { label: "My Campaigns", path: "/my-campaigns" },
-    { label: "Create Campaign", path: "/create-campaign" },
+    { label: "Explore", path: "/explore" },
+
     { label: "Blockchain Transparency", path: "/blockchain" },
   ],
   ngo: [
