@@ -76,11 +76,9 @@ import { useQueryClient } from "@tanstack/react-query";
 const menuItems = {
   admin: [
     { label: "Dashboard", path: "/" },
-    { label: "Manage Users", path: "/users" },
-    { label: "NGOs", path: "/ngos" },
-    { label: "Donations", path: "/donations" },
+    { label: "My Campaigns", path: "/my-campaigns" },
+    { label: "Create Campaign", path: "/create-campaign" },
     { label: "Blockchain Transparency", path: "/blockchain" },
-    { label: "Settings", path: "/settings" },
   ],
   ngo: [
     { label: "NGO Dashboard", path: "/ngo-dashboard" },
@@ -88,8 +86,6 @@ const menuItems = {
     { label: "Create Campaign", path: "/create-campaign" },
     { label: "NGO Form", path: "/ngo-form" }, // Matches nested route
     { label: "Blockchain Transparency", path: "/blockchain" },
-    // { label: "Donations", path: "/donations" },
-    { label: "Reports", path: "/reports" },
   ],
   donor: [
     { label: "Explore", path: "/explore" },
