@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: function () {
         // Only NGOs get verified field, default false
-        return this.role === "NGO" ? false : undefined;
+        return this.role === "ngo" ? false : undefined;
       },
     },
     ngoDetails: {

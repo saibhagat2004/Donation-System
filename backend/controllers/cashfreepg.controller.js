@@ -146,11 +146,13 @@ export const addBeneficiary = async (req, res) => {
           org_name,
           org_pan,
           org_gst: org_gst || ""
-        },
-        verified: true
+        }
+        // verified: false - Let admin approve, don't auto-verify
       }, { new: true });
 
       console.log("MongoDB update result:", updateResult);
+      console.log("✅ NGO details saved. Verification status:", updateResult?.verified);
+      console.log("🔔 NGO submission requires admin approval before verification");
 
       if (!updateResult) {
         console.error("User not found or not updated in MongoDB for _id:", req.user._id);
@@ -160,14 +162,15 @@ export const addBeneficiary = async (req, res) => {
       // Create a mock response similar to what Cashfree would return
       const mockResponse = {
         beneficiary_id,
-        beneficiary_status: "VERIFIED", 
+        beneficiary_status: "PENDING_VERIFICATION", 
         createdAt: new Date().toISOString()
       };
 
       return res.json({ 
         beneficiary_id, 
-        status: "added", 
+        status: "submitted", 
         data: mockResponse,
+        message: "NGO details submitted successfully. Your request is pending admin approval.",
         note: "Beneficiary created directly in database (Cashfree API bypassed)"
       });
       

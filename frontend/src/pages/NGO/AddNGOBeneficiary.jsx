@@ -278,7 +278,12 @@ export default function AddNGOBeneficiary() {
         headers: { "Content-Type": "application/json" }
       });
       setServerError("");
-      setSuccessMessage(`Beneficiary successfully added! ID: ${res.data.beneficiary_id}`);
+      
+      // Show proper message based on response
+      const message = res.data.message || 
+                     `NGO details submitted successfully! Your request is pending admin approval. Beneficiary ID: ${res.data.beneficiary_id}`;
+      setSuccessMessage(message);
+      
       // Reset form after successful submission
       setForm({
         name: "",

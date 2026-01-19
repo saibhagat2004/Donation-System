@@ -15,6 +15,7 @@ import receiptRouter from "./routers/receipt.route.js"
 import testRouter from "./routers/test.route.js"
 import bankRouter from "./routers/bank.route.js"
 import feedbackRouter from "./routers/feedback.route.js"
+import adminRouter from "./routers/admin.route.js"
 import pendingTransactionService from "./services/pendingTransactionService.js"
 
 dotenv.config(); //use to read .env content
@@ -68,6 +69,7 @@ app.use("/api/receipts",receiptRouter);
 app.use("/api/test",testRouter);
 app.use("/api/bank",bankRouter);
 app.use("/api/feedback",feedbackRouter);
+app.use("/api/admin",adminRouter);
 
 // Health check endpoint for Render
 app.get("/api/auth/health", (req, res) => {

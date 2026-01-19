@@ -153,7 +153,7 @@ export const getNgoReputation = async (req, res) => {
       });
     }
 
-    if (ngo.role !== 'NGO') {
+    if (ngo.role !== 'ngo') {
       return res.status(400).json({ 
         success: false, 
         message: "User is not an NGO" 
@@ -190,7 +190,7 @@ export const getNgoTransactionsWithFeedback = async (req, res) => {
     const ngoId = req.user._id;
 
     // Verify user is an NGO
-    if (req.user.role !== 'NGO') {
+    if (req.user.role !== 'ngo') {
       return res.status(403).json({ 
         success: false, 
         message: "Access denied. NGO role required" 

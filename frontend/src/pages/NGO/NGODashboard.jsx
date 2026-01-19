@@ -10,9 +10,12 @@ export default function NGODashboard() {
   const [pendingTransactions, setPendingTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(null);
+  const [verificationStatus, setVerificationStatus] = useState(null);
+  const [isCheckingVerification, setIsCheckingVerification] = useState(true);
 
   useEffect(() => {
     if (authUser && authUser.role === 'ngo') {
+      checkVerificationStatus();
       loadPendingTransactions();
       
       // Set up auto-refresh every 30 seconds
@@ -27,6 +30,24 @@ export default function NGODashboard() {
       };
     }
   }, [authUser]);
+
+  const checkVerificationStatus = async () => {
+    try {
+      setIsCheckingVerification(true);
+      const response = await fetch("/api/ngo/verification-status", {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setVerificationStatus(result.verification);
+      }
+    } catch (error) {
+      console.error('Error checking verification status:', error);
+    } finally {
+      setIsCheckingVerification(false);
+    }
+  };
 
   const loadPendingTransactions = async () => {
     try {
@@ -97,6 +118,89 @@ export default function NGODashboard() {
           Refresh
         </button>
       </div>
+
+      {/* Verification Status Banner */}
+      {!isCheckingVerification && verificationStatus && (
+        <>
+          {/* NGO has submitted form - show verification status */}
+          {verificationStatus.has_ngo_details ? (
+            <div className={`mb-6 p-6 rounded-xl border-2 ${
+              verificationStatus.is_verified 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-yellow-50 border-yellow-200'
+            }`}>
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-full ${
+                  verificationStatus.is_verified 
+                    ? 'bg-green-100' 
+                    : 'bg-yellow-100'
+                }`}>
+                  {verificationStatus.is_verified ? (
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h3 className={`text-lg font-semibold ${
+                    verificationStatus.is_verified ? 'text-green-800' : 'text-yellow-800'
+                  }`}>
+                    {verificationStatus.is_verified 
+                      ? '✓ Your NGO is Verified!' 
+                      : '⏳ Verification Status: Under Admin Review'}
+                  </h3>
+                  <p className={`mt-1 ${
+                    verificationStatus.is_verified ? 'text-green-700' : 'text-yellow-700'
+                  }`}>
+                    {verificationStatus.is_verified 
+                      ? 'You can now create campaigns and receive donations.' 
+                      : 'Your verification request has been submitted and is being reviewed by our admin team.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* NGO has NOT submitted form yet - show action required */
+            <div className="mb-6 p-6 rounded-xl border-2 bg-blue-50 border-blue-200">
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-full bg-blue-100">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-blue-800">
+                    📝 Action Required: Complete Your NGO Profile
+                  </h3>
+                  <p className="mt-1 text-blue-700">
+                    To create campaigns and receive donations, you need to submit your NGO beneficiary details for verification.
+                  </p>
+                  {verificationStatus.missing_ngo_details && verificationStatus.missing_ngo_details.length > 0 && (
+                    <div className="mt-3">
+                      <p className="font-medium text-blue-800 mb-2">Required Information:</p>
+                      <ul className="list-disc list-inside space-y-1 text-blue-700">
+                        {verificationStatus.missing_ngo_details.map((detail, idx) => (
+                          <li key={idx}>{detail}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <Link 
+                    to="/add-ngo-beneficiary" 
+                    className="inline-block mt-4 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
+                  >
+                    Submit NGO Details Now →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

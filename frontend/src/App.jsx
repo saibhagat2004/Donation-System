@@ -20,6 +20,7 @@ import DonationReceiptPage from "./pages/DonationReceiptPage";
 import BlockchainTransactions from "./pages/Blockchain/BlockchainTransactions";
 import ReceiptDetails from "./pages/Blockchain/ReceiptDetails";
 import NgoBlockchainDetails from "./pages/Blockchain/NgoBlockchainDetails";
+import AdminDashboard from "./pages/Admin/AdminDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 function App() {
@@ -67,7 +68,9 @@ function App() {
           >
             {/* Default page with role-based routing */}
             <Route index element={
-              authUser?.role === "ngo" ? (
+              authUser?.role === "admin" ? (
+                <Navigate to="/admin-dashboard" replace />
+              ) : authUser?.role === "ngo" ? (
                 <Navigate to="/ngo-dashboard" replace />
               ) : authUser?.role === "donor" ? (
                 <Navigate to="/explore" replace />
@@ -78,6 +81,8 @@ function App() {
 
             {/* Example additional routes inside layout */}
             <Route path="explore" element={<Explore />} />
+            <Route path="admin-dashboard" element={<AdminDashboard />} />
+            <Route path="add-ngo-beneficiary" element={<NgoForm />} />
             <Route path="ngo-form" element={<NgoForm />} />
             <Route path="ngo-dashboard" element={<NGODashboard />} />
             <Route path="my-campaigns" element={<MyCampaigns />} />
